@@ -15,9 +15,9 @@ Started as "regional mobility analysis with Sedona". Reframed as a personal live
 We're closer than the open-issues list makes it look. The repo already has:
 the data on disk (1.4 GB MITMA + 251 MB OSM PBF + 25 MB MITMA zoning incl. 60 MB GeoJSON), every parser implementation, every schema, the scoring function, the deck.gl HTML exporter, and 44 green tests. The **only** thing missing for "I can show this to a recruiter and click around real Catalonia data" is **a Spark+Sedona runtime that can execute notebook 01 once**.
 
-### The breakthrough: stop chasing Docker, install Spark+Sedona directly on atlas.
+### Local environment: Miniforge + conda env `sedona` (executed 2026-05-14)
 
-Docker compose builds have failed four times (PEP 668 numpy uninstall, GHCR auth for Valhalla, etc.). Each fix produces a new failure mode. **Skip the container for v1.** Atlas already has Java available via apt, Python 3.13, plenty of disk; a venv at `/home/nls/Documents/dev/mitma-sedona/.venv-spark` with `pip install pyspark>=3.5 'apache-sedona[spark]>=1.9'` gets us a working SedonaContext in ~3 minutes. Once the pipeline produces the gold parquet on real data, **everything cascades** — deck.gl HTML with real flows, descriptive-stats charts, README screenshots. The Docker container becomes a "reproducibility for outside contributors" concern, not a blocker for our prototype.
+Docker compose builds have failed four times (PEP 668 numpy uninstall, GHCR auth for Valhalla, pyrobuf/setuptools breakage). **Skip the container for v1.** The working local path is **Miniforge3 + a conda env on Python 3.11** — conda-forge supplies the GDAL/PROJ/GEOS/Java/pyrosm stack, pip layers `apache-sedona[spark]` and the viz packages on top. ~3 min to provision, all 44 tests green, PySpark 4.1.1 + Sedona 1.9 + OpenJDK 21 ready for M6 notebook execution. Python 3.11 is forced by `pyrosm` (no py3.12 binaries; pip build is broken upstream); `pyproject.toml` already allows it. Full recipe, version table, and Docker-vs-local guidance: [`docs/local_env_setup.md`](docs/local_env_setup.md). Docker remains the "reproducibility for outside contributors" lane, not the daily-dev path.
 
 ### What "working prototype" means concretely
 
