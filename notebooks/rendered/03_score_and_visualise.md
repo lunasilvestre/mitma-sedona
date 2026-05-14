@@ -1,30 +1,16 @@
-# ---
-# jupyter:
-#   jupytext:
-#     formats: ipynb,py:percent
-#     text_representation:
-#       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
-#   kernelspec:
-#     display_name: Python 3 (ipykernel)
-#     language: python
-#     name: python3
-# ---
+# 03 — Score, rank, visualise
 
-# %% [markdown]
-# # 03 — Score, rank, visualise
-#
-# Reads `data/gold/h3_res8_catalonia.parquet`, applies the weighted
-# liveability score, and renders three visualisation cells:
-#
-# 1. **Lonboard ArcLayer** — full MITMA OD for one weekday (mass density)
-# 2. **pydeck H3HexagonLayer** — interactive constraint toggles (notebook)
-# 3. **deck.gl raw HTML** — exported `docs/catalonia_liveability.html`
-#
-# Plus top-10 ranking and sensitivity analysis.
+Reads `data/gold/h3_res8_catalonia.parquet`, applies the weighted
+liveability score, and renders three visualisation cells:
 
-# %%
+1. **Lonboard ArcLayer** — full MITMA OD for one weekday (mass density)
+2. **pydeck H3HexagonLayer** — interactive constraint toggles (notebook)
+3. **deck.gl raw HTML** — exported `docs/catalonia_liveability.html`
+
+Plus top-10 ranking and sensitivity analysis.
+
+
+```python
 import os
 import sys
 from pathlib import Path
@@ -64,44 +50,48 @@ config = (
 )
 sedona = SedonaContext.create(config)
 sedona.sparkContext.setLogLevel("ERROR")
+```
 
-# %% [markdown]
-# ## 1. Load gold + score
+## 1. Load gold + score
 
-# %%
+
+```python
 gold_sdf = sedona.read.parquet(str(REPO / "data/gold/h3_res8_catalonia.parquet"))
 gold_pdf = gold_sdf.toPandas()
 print(f"Gold rows: {len(gold_pdf):,}")
 gold_pdf = scoring.score_dataframe(gold_pdf, preset="default")
 print(f"Score range: {gold_pdf.liveability_score.min():.1f} — {gold_pdf.liveability_score.max():.1f}")
+```
 
-# %% [markdown]
-# ## 2. Top-10 ranking
+## 2. Top-10 ranking
 
-# %%
+
+```python
 top10 = gold_pdf.nlargest(10, "liveability_score")[
     ["h3_id", "liveability_score", "train_reach_min",
      "climb_min_m", "yoga_min_m", "hospital_min_m",
      "motorway_within_500m"]
 ]
 top10
+```
 
-# %% [markdown]
-# ## 3. Sensitivity across weight presets
+## 3. Sensitivity across weight presets
 
-# %%
+
+```python
 sens = scoring.sensitivity_top10(gold_pdf, k=10)
 sens
+```
 
-# %% [markdown]
-# ## 4. Lonboard — MITMA daily OD for 2024-03-06 (Wed)
-#
-# Uses the GeoArrow zero-copy handoff (`docs/sedona_sql_patterns.md` §7).
-# Builds OD lines with `ST_MakeLine(ST_Centroid(o), ST_Centroid(d))` then
-# pre-computes `ST_StartPoint`/`ST_EndPoint` server-side so Lonboard's
-# accessors are pure column lookups.
+## 4. Lonboard — MITMA daily OD for 2024-03-06 (Wed)
 
-# %%
+Uses the GeoArrow zero-copy handoff (`docs/sedona_sql_patterns.md` §7).
+Builds OD lines with `ST_MakeLine(ST_Centroid(o), ST_Centroid(d))` then
+pre-computes `ST_StartPoint`/`ST_EndPoint` server-side so Lonboard's
+accessors are pure column lookups.
+
+
+```python
 # Same geopandas-direct hand-off as notebook 02 (Sedona GeoJSON reader
 # trips on one malformed feature; pandas-written parquet has tripped
 # Spark 4.1's footer check intermittently — easier to skip parquet).
@@ -139,8 +129,10 @@ flows_for_day = sedona.sql("""
 """)
 flows_pdf_count = flows_for_day.count()
 print(f"OD lines for 2024-03-06: {flows_pdf_count:,}")
+```
 
-# %%
+
+```python
 # Lonboard's GeoArrow handoff via `dataframe_to_arrow` can stumble on
 # Sedona 1.9 / Spark 4.1 edge cases — we wrap it so a render failure
 # doesn't kill the notebook execution. The arc data is still produced
@@ -156,11 +148,12 @@ try:
 except Exception as _exc:
     print(f"Lonboard render skipped: {_exc!r}")
     m = None
+```
 
-# %% [markdown]
-# ## 5. pydeck — interactive constraint toggles (in-notebook)
+## 5. pydeck — interactive constraint toggles (in-notebook)
 
-# %%
+
+```python
 import pydeck as pdk
 
 hex_layer = pdk.Layer(
@@ -177,15 +170,16 @@ pdk.Deck(
     initial_view_state=pdk.ViewState(longitude=1.7, latitude=41.6, zoom=8, pitch=45),
     map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
 )
+```
 
-# %% [markdown]
-# ## 6. Export hosted deck.gl HTML demo
-#
-# Replaces the synthetic `docs/preview_deck.html` with the real-data
-# `docs/catalonia_liveability.html`. Standalone, opens in any browser,
-# served by GitHub Pages.
+## 6. Export hosted deck.gl HTML demo
 
-# %%
+Replaces the synthetic `docs/preview_deck.html` with the real-data
+`docs/catalonia_liveability.html`. Standalone, opens in any browser,
+served by GitHub Pages.
+
+
+```python
 arcs_pdf = (
     flows_for_day.selectExpr(
         "ST_X(source_pt) AS source_lon", "ST_Y(source_pt) AS source_lat",
@@ -207,3 +201,4 @@ out = viz.export_deck_html(
     title="Catalonia Liveability — final score",
 )
 print(f"Wrote {out} ({out.stat().st_size:,} bytes)")
+```

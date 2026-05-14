@@ -50,12 +50,22 @@ import sys
 from pathlib import Path
 
 # Two operating modes. Set MITMA_SCOPE=dev for fast local iteration.
-SCOPE = os.environ.get("MITMA_SCOPE", "full")
+SCOPE = os.environ.get("MITMA_SCOPE", "dev")
 assert SCOPE in ("full", "dev")
 print(f"Running in --scope {SCOPE}")
 
-REPO = Path("/workspace") if Path("/workspace").exists() else Path.cwd().parent
+# Locate the repo root robustly: from notebooks/, from rendered/, or from /workspace.
+_here = Path.cwd()
+if (_here / "PLAN.md").exists():
+    REPO = _here
+elif (_here.parent / "PLAN.md").exists():
+    REPO = _here.parent
+elif Path("/workspace/PLAN.md").exists():
+    REPO = Path("/workspace")
+else:
+    REPO = Path("/home/nls/Documents/dev/mitma-sedona")
 sys.path.insert(0, str(REPO / "src"))
+print(f"REPO = {REPO}")
 
 from catmob import (
     io_mitma, io_osm, io_air, io_gtfs, io_biodiversity, io_pollution, io_health, io_thermal,
@@ -64,15 +74,29 @@ from catmob import (
 
 # %% [markdown]
 # ## SedonaContext
+#
+# Spark 4.1.x + Sedona 1.9.0 + Scala 2.13. Maven coordinates are pinned to
+# the sedona-spark-shaded-4.0 build (Sedona's "4.0" artifact is also Spark
+# 4.1-compatible modulo one optional Catalyst rule that emits a noisy but
+# non-fatal `FoldableUnevaluable` ClassNotFoundException at session start —
+# the SQL we exercise here is unaffected).
 
 # %%
 from sedona.spark import SedonaContext
 
+SEDONA_PACKAGES = (
+    "org.apache.sedona:sedona-spark-shaded-4.0_2.13:1.9.0,"
+    "org.datasyslab:geotools-wrapper:1.9.0-33.5"
+)
+
 config = (
     SedonaContext.builder()
         .appName("mitma-sedona-01-ingest")
+        .config("spark.jars.packages", SEDONA_PACKAGES)
         .config("spark.sql.session.timeZone", "Europe/Madrid")
         .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.shuffle.partitions", "16")
+        .config("spark.driver.memory", "6g")
         .config("sedona.global.indextype", "rtree")
         .config("sedona.join.optimizationmode", "all")
         .config("sedona.join.autoBroadcastJoinThreshold", "100MB")
@@ -80,6 +104,7 @@ config = (
         .getOrCreate()
 )
 sedona = SedonaContext.create(config)
+sedona.sparkContext.setLogLevel("ERROR")
 print("Sedona session up. Spark UI on http://localhost:4040")
 
 # %% [markdown]
@@ -107,24 +132,31 @@ print(f"HOURLY: {len(HOURLY_DATES)} days ({HOURLY_DATES[0]}..{HOURLY_DATES[-1]})
 # %%
 # Files should already be downloaded by scripts/fetch_mitma.sh
 # Run that first if data/bronze/mitma/ is empty.
-DAILY_PATHS = [str(REPO / f"data/bronze/mitma/daily/{d[:7]}/{d.replace('-','')}_Viajes_distritos.csv.gz") for d in DAILY_DATES]
-HOURLY_PATHS = [str(REPO / f"data/bronze/mitma/hourly/{d[:7]}/{d.replace('-','')}_Viajes_distritos.csv.gz") for d in HOURLY_DATES]
+DAILY_PATHS = [
+    str(REPO / f"data/bronze/mitma/daily/{d[:7]}/{d.replace('-','')}_Viajes_distritos.csv.gz")
+    for d in DAILY_DATES
+]
 existing_daily = [p for p in DAILY_PATHS if Path(p).exists()]
-existing_hourly = [p for p in HOURLY_PATHS if Path(p).exists()]
 print(f"Found {len(existing_daily)}/{len(DAILY_PATHS)} daily files")
-print(f"Found {len(existing_hourly)}/{len(HOURLY_PATHS)} hourly files")
 if not existing_daily:
-    print("⚠  Run scripts/fetch_mitma.sh first to populate data/bronze/mitma/")
+    raise RuntimeError(
+        "No MITMA daily files on disk — run scripts/fetch_mitma.sh first."
+    )
 
 # %%
-mitma_daily = io_mitma.read_with_sedona(sedona, existing_daily, kind="daily", catalonia_only=True)
-print(f"Daily rows after Catalonia filter: {mitma_daily.count():,}")
-io_mitma.write_bronze_parquet(mitma_daily, str(REPO / "data/bronze/mitma_parquet"), kind="daily")
+# v2 MITMA distritos CSVs are *already hour-level* (every row carries
+# `periodo`), so a single read populates both the `daily` and `hourly`
+# bronze parquet trees. Downstream notebooks aggregate over `periodo` when
+# they want daily totals and group by `(fecha, periodo, ...)` when they
+# want hourly totals.
+mitma_od = io_mitma.read_with_sedona(sedona, existing_daily, kind="daily", catalonia_only=True)
+mitma_od = mitma_od.cache()
+mitma_total = mitma_od.count()
+print(f"OD rows after Catalonia filter: {mitma_total:,}")
 
-# %%
-mitma_hourly = io_mitma.read_with_sedona(sedona, existing_hourly, kind="hourly", catalonia_only=True)
-print(f"Hourly rows after Catalonia filter: {mitma_hourly.count():,}")
-io_mitma.write_bronze_parquet(mitma_hourly, str(REPO / "data/bronze/mitma_parquet"), kind="hourly")
+io_mitma.write_bronze_parquet(mitma_od, str(REPO / "data/bronze/mitma_parquet"), kind="daily")
+io_mitma.write_bronze_parquet(mitma_od, str(REPO / "data/bronze/mitma_parquet"), kind="hourly")
+print("Bronze parquet written to mitma_parquet/{daily,hourly}/ (same data; hourly grain).")
 
 # %% [markdown]
 # ## 2. MITMA distritos zoning
@@ -134,11 +166,12 @@ io_mitma.write_bronze_parquet(mitma_hourly, str(REPO / "data/bronze/mitma_parque
 # in notebook 02 (see `docs/sedona_sql_patterns.md` §2).
 
 # %%
+# The MITMA zoning GeoJSON has properties.ID (uppercase) and no name property.
+# Names live in the companion `nombres_distritos.csv` if needed downstream.
 zones = (
     sedona.read.format("geojson")
         .load(str(REPO / "data/bronze/mitma/zones/zonificacion_distritos.geojson"))
-        .selectExpr("properties.id AS id", "properties.name AS name",
-                    "ST_GeomFromGeoJSON(geometry) AS geom")
+        .selectExpr("properties.ID AS id", "ST_GeomFromGeoJSON(geometry) AS geom")
 )
 zones.createOrReplaceTempView("zones")
 print(f"Zones loaded: {zones.count():,}")
@@ -152,16 +185,47 @@ print(f"Zones loaded: {zones.count():,}")
 # %%
 PBF_PATH = str(REPO / "data/bronze/osm/cataluna_pruned.osm.pbf")
 if not Path(PBF_PATH).exists():
-    print(f"⚠  Run scripts/fetch_osm.sh — missing {PBF_PATH}")
-else:
-    pois = io_osm.extract_pois_with_sedona(sedona, PBF_PATH)
-    pois.write.mode("overwrite").parquet(str(REPO / "data/bronze/osm/pois.parquet"))
-    print(f"POIs by category:")
-    pois.groupBy("category").count().show()
+    # Fall back to the unpruned regional extract if the pre-pruned file is
+    # absent — scripts/fetch_osm.sh pre-prunes, but for the prototype run we
+    # accept the full Cataluña extract too.
+    alt = REPO / "data/bronze/osm/cataluna-latest.osm.pbf"
+    if alt.exists():
+        PBF_PATH = str(alt)
+        print(f"Using unpruned PBF: {PBF_PATH}")
+    else:
+        raise RuntimeError(f"OSM PBF not found at {PBF_PATH} or {alt}.")
 
-    network = io_osm.extract_network_with_sedona(sedona, PBF_PATH)
-    network.write.mode("overwrite").parquet(str(REPO / "data/bronze/osm/network.parquet"))
-    print(f"Network features: {network.count():,}")
+# --- POIs from OSM nodes via Sedona's native osmpbf reader. ---
+pois = io_osm.extract_pois_with_sedona(sedona, PBF_PATH).cache()
+poi_total = pois.count()
+print(f"POIs extracted: {poi_total:,}")
+pois.write.mode("overwrite").parquet(str(REPO / "data/bronze/osm/pois.parquet"))
+print("POIs by category:")
+pois.groupBy("category").count().orderBy("category").show()
+
+# --- Railway stations (GTFS fallback for v1: synthetic trips_per_day=12). ---
+stations = io_osm.extract_stations_with_sedona(sedona, PBF_PATH)
+stations.write.mode("overwrite").parquet(str(REPO / "data/bronze/osm/stations.parquet"))
+print(f"Railway stations / halts: {stations.count():,}")
+
+# --- Highway network via pyrosm. Sedona's native PBF reader returns nodes
+#     and refs but not ready-made way geometries; pyrosm hands us LineStrings
+#     directly which is what the motorway-penalty join needs. We persist as
+#     a Sedona-compatible parquet of WKT geometry (read back as ST_GeomFromText).
+import time as _t
+_t0 = _t.time()
+print("Extracting highway network with pyrosm (driving preset) — ~1-2 min…")
+network_gdf = io_osm.extract_network_pyrosm(PBF_PATH, network_type="driving")
+print(f"Network ways: {len(network_gdf):,}  (extraction took {_t.time()-_t0:.0f}s)")
+import pandas as _pd
+net_pdf = _pd.DataFrame({
+    "osm_id":  network_gdf["osm_id"].astype("int64").values,
+    "kind":    network_gdf["kind"].astype(str).values,
+    "subtype": network_gdf["subtype"].astype(str).values,
+    "wkt":     network_gdf.geometry.to_wkt().values,
+})
+net_pdf.to_parquet(REPO / "data/bronze/osm/network.parquet", index=False)
+print("Wrote network.parquet (WKT column; read back with ST_GeomFromWKT).")
 
 # %% [markdown]
 # ## 4. GTFS — Renfe Rodalies + FGC
@@ -169,13 +233,20 @@ else:
 # %%
 RODALIES = REPO / "data/bronze/gtfs/rodalies"
 FGC = REPO / "data/bronze/gtfs/fgc"
-if RODALIES.exists() and FGC.exists():
+_have_gtfs = (
+    RODALIES.exists() and (RODALIES / "stops.txt").exists()
+    and FGC.exists() and (FGC / "stops.txt").exists()
+)
+if _have_gtfs:
     bundle = io_gtfs.load_combined(RODALIES, FGC)
     bundle["stops"].to_parquet(REPO / "data/bronze/gtfs/stops.parquet", index=False)
     bundle["freq"].to_parquet(REPO / "data/bronze/gtfs/frequency.parquet", index=False)
     print(f"Stops: {len(bundle['stops'])}, Frequency rows: {len(bundle['freq'])}")
 else:
-    print("⚠  Run scripts/fetch_gtfs.sh first")
+    print(
+        "⚠  No GTFS feeds on disk; falling back to OSM railway=station nodes "
+        "with a synthetic trips_per_day=12 (see bronze/osm/stations.parquet)."
+    )
 
 # %% [markdown]
 # ## 5. Air quality — XVPCA + EEA + CAMS

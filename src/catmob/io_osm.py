@@ -119,13 +119,14 @@ POI_CATEGORY_SQL_CASE = """
 def read_pbf_with_sedona(spark, pbf_path: str, *, kind: str = "all"):  # noqa: ANN001
     """Read an OSM PBF via Sedona's native ``osmpbf`` format.
 
-    Sedona 1.7+ ships a native PBF reader returning a DataFrame with
-    columns ``id``, ``type`` (node|way|relation), ``tags``, ``lon``, ``lat``.
+    Sedona 1.9 returns columns ``id``, ``kind`` (node|way|relation),
+    ``location`` (struct with ``longitude``/``latitude``), ``tags`` (map),
+    ``refs`` (array of node ids), and metadata.
     """
     df = spark.read.format("osmpbf").load(pbf_path)
     if kind == "all":
         return df
-    return df.where(f"type = '{kind[:-1]}'")  # 'nodes' → 'node'
+    return df.where(f"kind = '{kind[:-1]}'")  # 'nodes' → 'node'
 
 
 def extract_pois_with_sedona(spark, pbf_path: str):  # noqa: ANN001
@@ -137,31 +138,65 @@ def extract_pois_with_sedona(spark, pbf_path: str):  # noqa: ANN001
                'node' AS osm_type,
                {POI_CATEGORY_SQL_CASE} AS category,
                tags['name'] AS name,
-               lon, lat, tags
+               location.longitude AS lon,
+               location.latitude  AS lat,
+               tags
         FROM osm_nodes
         WHERE {POI_CATEGORY_SQL_CASE} IS NOT NULL
+          AND location IS NOT NULL
     """)
 
 
-def extract_network_with_sedona(spark, pbf_path: str):  # noqa: ANN001
-    """Extract highway / railway / coastline LineStrings from an OSM PBF."""
-    df = (
-        spark.read.format("osmpbf")
-            .option("mode", "linestring")
-            .load(pbf_path)
-    )
-    df.createOrReplaceTempView("osm_ways")
+def extract_stations_with_sedona(spark, pbf_path: str):  # noqa: ANN001
+    """Return railway stations / halts as a node-level Sedona DataFrame.
+
+    Used as a GTFS fallback when no real timetable feed is available. Each
+    station carries a synthetic ``trips_per_day = 12`` so downstream code
+    can treat it uniformly.
+    """
+    nodes = read_pbf_with_sedona(spark, pbf_path, kind="nodes")
+    nodes.createOrReplaceTempView("osm_nodes_stations")
     return spark.sql("""
-        SELECT id AS osm_id,
-               CASE WHEN tags['highway'] IS NOT NULL THEN 'highway'
-                    WHEN tags['railway'] IS NOT NULL THEN 'railway'
-                    WHEN tags['natural'] = 'coastline' THEN 'coastline'
-                    END AS kind,
-               COALESCE(tags['highway'], tags['railway'],
-                        CASE WHEN tags['natural']='coastline' THEN 'coastline' END) AS subtype,
-               geometry
-        FROM osm_ways
-        WHERE tags['highway'] IS NOT NULL
-           OR tags['railway'] IS NOT NULL
-           OR tags['natural'] = 'coastline'
+        SELECT CAST(id AS STRING) AS stop_id,
+               COALESCE(tags['name'], CONCAT('station_', id)) AS stop_name,
+               location.longitude AS lon,
+               location.latitude  AS lat,
+               12 AS trips_per_day,
+               'osm' AS feed
+        FROM osm_nodes_stations
+        WHERE tags['railway'] IN ('station','halt')
+          AND location IS NOT NULL
     """)
+
+
+def extract_network_pyrosm(pbf_path: str, *, network_type: str = "driving"):
+    """Extract a highway network from an OSM PBF using pyrosm.
+
+    Returns a GeoDataFrame with ``osm_id``, ``kind``, ``subtype``, and
+    ``geometry`` (LineString in EPSG:4326). ``network_type`` selects the
+    pyrosm preset ("driving" pulls motorways + trunk + primary + ...);
+    we tag rows with ``subtype = tags['highway']`` so the SQL filter for
+    motorways stays intact.
+
+    Sedona's native ``osmpbf`` reader does not yet emit ready geometries
+    for ways, so we use pyrosm as a one-shot bronze build and let Sedona
+    take over from the parquet.
+    """
+    import geopandas as gpd
+    import pyrosm
+
+    osm = pyrosm.OSM(pbf_path)
+    gdf = osm.get_network(network_type=network_type)
+    if gdf is None or gdf.empty:
+        return gpd.GeoDataFrame(columns=["osm_id", "kind", "subtype", "geometry"], crs="EPSG:4326")
+    subtype_col = "highway" if "highway" in gdf.columns else None
+    out = gpd.GeoDataFrame(
+        {
+            "osm_id": gdf.get("id", gdf.index).astype("int64"),
+            "kind": "highway",
+            "subtype": gdf[subtype_col].astype(str) if subtype_col else "unknown",
+            "geometry": gdf.geometry,
+        },
+        crs=gdf.crs,
+    )
+    return out.to_crs(epsg=4326)

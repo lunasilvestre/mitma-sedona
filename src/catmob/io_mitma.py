@@ -163,31 +163,39 @@ def plan_files(
 # ---------------------------------------------------------------------------
 
 def _spark_schema_for(kind: str):
-    """Build a Spark StructType matching MITMA_DAILY_OD_SCHEMA / HOURLY."""
+    """Build a Spark StructType matching the on-disk MITMA v2 format.
+
+    Note: the public MITMA v2 distritos CSVs we observe in 2024-03 are
+    pipe-delimited and every row carries a ``periodo`` (hour-of-day) column,
+    plus the ``estudio_*_posible`` columns added in the 2024 schema refresh.
+    The ``kind`` argument is kept for API compatibility but the schema is
+    identical for daily and hourly — callers aggregate over ``periodo`` when
+    they want daily totals.
+    """
     from pyspark.sql.types import (
         DoubleType,
-        IntegerType,
         StringType,
         StructField,
         StructType,
     )
 
     fields = [
-        StructField("fecha",             StringType(),  False),
-        StructField("origen",            StringType(),  False),
-        StructField("destino",           StringType(),  False),
-        StructField("distancia",         StringType(),  False),
-        StructField("actividad_origen",  StringType(),  False),
-        StructField("actividad_destino", StringType(),  False),
-        StructField("residencia",        StringType(),  True),
-        StructField("renta",             StringType(),  True),
-        StructField("edad",              StringType(),  True),
-        StructField("sexo",              StringType(),  True),
-        StructField("viajes",            DoubleType(),  False),
-        StructField("viajes_km",         DoubleType(),  False),
+        StructField("fecha",                   StringType(),  False),
+        StructField("periodo",                 StringType(),  False),
+        StructField("origen",                  StringType(),  False),
+        StructField("destino",                 StringType(),  False),
+        StructField("distancia",               StringType(),  False),
+        StructField("actividad_origen",        StringType(),  False),
+        StructField("actividad_destino",       StringType(),  False),
+        StructField("estudio_origen_posible",  StringType(),  True),
+        StructField("estudio_destino_posible", StringType(),  True),
+        StructField("residencia",              StringType(),  True),
+        StructField("renta",                   StringType(),  True),
+        StructField("edad",                    StringType(),  True),
+        StructField("sexo",                    StringType(),  True),
+        StructField("viajes",                  DoubleType(),  False),
+        StructField("viajes_km",               DoubleType(),  False),
     ]
-    if kind == "hourly":
-        fields.insert(1, StructField("periodo", IntegerType(), False))
     return StructType(fields)
 
 
@@ -198,18 +206,19 @@ def read_with_sedona(
     kind: str = "daily",
     catalonia_only: bool = True,
 ):
-    """Read MITMA OD files via Spark with the documented schema.
+    """Read MITMA v2 OD CSV.gz files via Spark.
 
-    Uses the Wherobots-aligned semicolon-delimited UTF-8 read pattern (see
-    docs/sedona_sql_patterns.md §2). Filters at the SQL level so only
-    Catalonia-touching rows are materialised.
+    The 2024 MITMA v2 distritos format is **pipe-delimited UTF-8** with a
+    ``periodo`` (hour-of-day) column in every row; aggregation to "daily"
+    sums over periodo. Filters at the SQL level so only Catalonia-touching
+    rows are materialised.
     """
     if kind not in {"daily", "hourly"}:
         raise ValueError(f"kind must be 'daily' or 'hourly', got {kind!r}")
     schema = _spark_schema_for(kind)
 
     df = (
-        spark.read.option("sep", ";")
+        spark.read.option("sep", "|")
             .option("encoding", "UTF-8")
             .option("header", "true")
             .schema(schema)
