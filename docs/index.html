@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>mitma-sedona — Catalonia Liveability × Mobility</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; min-height: 100%; background: #0a0e1a; color: #e8eaf2;
+               font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; letter-spacing: -0.01em; margin: 0 0 8px; }
+  p.tagline { color: #a0a8c0; margin: 0 0 32px; font-size: 15px; line-height: 1.55; }
+  .card { display: block; background: rgba(20, 25, 40, 0.6); border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px; padding: 18px 20px; margin: 0 0 14px; text-decoration: none; color: inherit;
+          transition: border-color 120ms ease, transform 120ms ease; }
+  .card:hover { border-color: rgba(120, 200, 255, 0.5); transform: translateY(-1px); }
+  .card h2 { font-size: 14px; margin: 0 0 4px; color: #88d4ff; letter-spacing: 0.02em; }
+  .card p  { font-size: 13px; margin: 0; color: #a0a8c0; line-height: 1.5; }
+  .badges { margin: 24px 0 0; }
+  .badge { display: inline-block; padding: 3px 8px; margin: 0 4px 4px 0; border-radius: 4px;
+           font-size: 11px; background: rgba(120, 200, 255, 0.18); color: #88d4ff; }
+  footer { margin: 48px 0 0; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06);
+           font-size: 12px; color: #708090; }
+  footer a { color: #a0a8c0; }
+  code { background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>mitma-sedona</h1>
+  <p class="tagline">
+    Multi-criteria liveability index over Catalonia. <b>Where could I live well</b> —
+    within bike-reach of a train to Barcelona, climbing &amp; yoga nearby, close to
+    green or sea, away from heavy industry, urban heat, and noise.
+  </p>
+
+  <div class="badges">
+    <span class="badge">Apache Sedona 1.9</span>
+    <span class="badge">Spark 3.5</span>
+    <span class="badge">H3 res 8</span>
+    <span class="badge">Lonboard · pydeck · deck.gl</span>
+    <span class="badge">MITMA v2 + OSM + EEA + Landsat</span>
+  </div>
+
+  <h2 style="margin-top: 36px; font-size: 12px; color: #708090; text-transform: uppercase; letter-spacing: 0.06em;">
+    Live demos
+  </h2>
+
+  <a href="preview_deck.html" class="card">
+    <h2>Preliminary preview (synthetic data) →</h2>
+    <p>Standalone deck.gl page exercising H3HexagonLayer (extruded score), ArcLayer (MITMA OD from BCN),
+       ScatterplotLayer (climbing &amp; yoga POIs), with layer toggles, sliders, and hover tooltips.
+       Synthetic Catalonia data so it renders without any backend.</p>
+  </a>
+
+  <a href="catalonia_liveability.html" class="card">
+    <h2>Production demo (real data, when notebook 03 has run) →</h2>
+    <p>Same layers, generated from the gold parquet by <code>catmob.viz.export_deck_html</code>.
+       This page is published whenever the M3 pipeline produces a fresh
+       <code>data/gold/h3_res8_catalonia.parquet</code>.</p>
+  </a>
+
+  <h2 style="margin-top: 36px; font-size: 12px; color: #708090; text-transform: uppercase; letter-spacing: 0.06em;">
+    Repo &amp; docs
+  </h2>
+
+  <a href="https://github.com/lunasilvestre/mitma-sedona" class="card">
+    <h2>github.com/lunasilvestre/mitma-sedona →</h2>
+    <p>Full source, Plan, Sedona SQL patterns, schemas, tests, notebooks.</p>
+  </a>
+
+  <a href="sedona_sql_patterns.md" class="card">
+    <h2>docs/sedona_sql_patterns.md →</h2>
+    <p>8 advanced SQL patterns adapted from Wherobots and Apache Sedona examples
+       (H3 cell-id explode, dasymetric disaggregation, RS_ZonalStats, ST_KNN,
+       BROADCAST hints, GeoArrow zero-copy, MAX_BY peak-hour, ST_DBSCAN).</p>
+  </a>
+
+  <footer>
+    Built by <a href="https://github.com/lunasilvestre">@lunasilvestre</a>.
+    Data: MITMS (mobility) · OpenStreetMap (ODbL) · EEA · Copernicus · GBIF · Generalitat de Catalunya.
+    Code: MIT.
+  </footer>
+</main>
+</body>
+</html>
