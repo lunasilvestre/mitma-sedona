@@ -1,0 +1,219 @@
+"""Visualisation helpers — Lonboard, pydeck, and standalone deck.gl HTML.
+
+The standalone ``export_deck_html`` function writes the production version
+of ``docs/preview_deck.html``: a self-contained page that loads from the
+gold parquet (or any equivalent DataFrame) and renders ArcLayer + H3HexagonLayer +
+ScatterplotLayer with the same controls as the preview.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Mapping
+
+import pandas as pd
+
+DECK_VERSION = "9.3.2"
+MAPLIBRE_VERSION = "4.7.1"
+H3_JS_VERSION = "4.1.0"
+DEFAULT_BASEMAP = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+
+
+def _color_for_score(s: float) -> tuple[int, int, int]:
+    """Viridis-ish 5-stop interpolation matching docs/preview_deck.html."""
+    stops = [(58, 31, 93), (122, 45, 110), (196, 69, 105), (255, 139, 61), (255, 209, 102)]
+    t = max(0.0, min(1.0, s / 100.0))
+    seg = t * (len(stops) - 1)
+    i = min(int(seg), len(stops) - 2)
+    f = seg - i
+    return tuple(int(stops[i][k] + (stops[i + 1][k] - stops[i][k]) * f) for k in range(3))
+
+
+def export_deck_html(
+    out_path: Path | str,
+    hexes: pd.DataFrame,
+    *,
+    arcs: pd.DataFrame | None = None,
+    pois: Mapping[str, pd.DataFrame] | None = None,
+    title: str = "Catalonia Liveability — final scoring",
+    initial_view: tuple[float, float, float, float] = (1.7, 41.6, 8.0, 45.0),
+    basemap: str = DEFAULT_BASEMAP,
+) -> Path:
+    """Write a self-contained deck.gl HTML page to ``out_path``.
+
+    ``hexes`` must include columns: ``h3_id``, ``liveability_score``, plus
+    any per-hex tooltip columns. ``arcs`` (optional) must include
+    ``source_lon``, ``source_lat``, ``target_lon``, ``target_lat``,
+    ``flow``. ``pois`` (optional) maps category → DataFrame with
+    ``lon``, ``lat``, ``name``.
+
+    Mirrors the layer layout of ``docs/preview_deck.html`` (the synthetic
+    preview) but reads from real gold data passed as DataFrames.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    hex_records = hexes[["h3_id", "liveability_score"] + [
+        c for c in hexes.columns
+        if c not in ("h3_id", "liveability_score") and not c.startswith("_")
+    ]].head(60_000).to_dict(orient="records")
+
+    arc_records: list[dict] = []
+    if arcs is not None and not arcs.empty:
+        arc_records = arcs[
+            [c for c in ["source_lon", "source_lat", "target_lon", "target_lat", "flow",
+                         "from_name", "to_name"] if c in arcs.columns]
+        ].head(5_000).to_dict(orient="records")
+
+    poi_blocks: dict[str, list[dict]] = {}
+    if pois:
+        for cat, df in pois.items():
+            if df is None or df.empty:
+                continue
+            poi_blocks[cat] = df[
+                [c for c in ["name", "lon", "lat"] if c in df.columns]
+            ].head(5_000).to_dict(orient="records")
+
+    payload = {
+        "title": title,
+        "initial_view": {
+            "longitude": initial_view[0],
+            "latitude": initial_view[1],
+            "zoom": initial_view[2],
+            "pitch": initial_view[3],
+            "bearing": 0,
+        },
+        "hexes": hex_records,
+        "arcs": arc_records,
+        "pois": poi_blocks,
+        "basemap": basemap,
+    }
+
+    html = _HTML_TEMPLATE.replace("__PAYLOAD_JSON__", json.dumps(payload))
+    out_path.write_text(html, encoding="utf-8")
+    return out_path
+
+
+_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>__TITLE_PLACEHOLDER__</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://unpkg.com/deck.gl@""" + DECK_VERSION + """/dist.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@""" + MAPLIBRE_VERSION + """/dist/maplibre-gl.js"></script>
+<link  href="https://unpkg.com/maplibre-gl@""" + MAPLIBRE_VERSION + """/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/h3-js@""" + H3_JS_VERSION + """/dist/h3-js.umd.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0e1a; color: #e8eaf2; font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; overflow: hidden; }
+  #map { position: absolute; inset: 0; }
+  .panel { position: absolute; background: rgba(14,18,30,0.92); backdrop-filter: blur(8px);
+           border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px;
+           font-size: 12px; line-height: 1.4; box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
+  #header { top: 12px; left: 12px; max-width: 360px; }
+  #header h1 { margin: 0 0 6px; font-size: 14px; }
+  #controls { top: 12px; right: 12px; min-width: 200px; }
+  #controls label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="header" class="panel"><h1>__TITLE_PLACEHOLDER__</h1>
+  <p>Generated by catmob.viz.export_deck_html. Pitch + drag to explore.</p></div>
+<div id="controls" class="panel">
+  <label><input type="checkbox" id="t-hex" checked /> Liveability score (3D)</label>
+  <label><input type="checkbox" id="t-arc" checked /> MITMA OD arcs</label>
+  <label><input type="checkbox" id="t-poi" checked /> POIs</label>
+</div>
+<script>
+const PAYLOAD = __PAYLOAD_JSON__;
+const { DeckGL, H3HexagonLayer, ArcLayer, ScatterplotLayer } = deck;
+function scoreColor(s){ const stops=[[58,31,93],[122,45,110],[196,69,105],[255,139,61],[255,209,102]];
+  const t=Math.max(0,Math.min(1,s/100)); const seg=t*(stops.length-1); const i=Math.min(Math.floor(seg),stops.length-2);
+  const f=seg-i; return stops[i].map((c,k)=>Math.round(c+(stops[i+1][k]-c)*f)); }
+const visible = { hex:true, arc:true, poi:true };
+function build(){
+  const layers=[];
+  if(visible.hex) layers.push(new H3HexagonLayer({id:'hex', data:PAYLOAD.hexes, pickable:true,
+    extruded:true, filled:true, getHexagon:d=>d.h3_id,
+    getFillColor:d=>[...scoreColor(d.liveability_score),220],
+    getElevation:d=>d.liveability_score*100, elevationScale:1}));
+  if(visible.arc && PAYLOAD.arcs.length) layers.push(new ArcLayer({id:'arc', data:PAYLOAD.arcs,
+    getSourcePosition:d=>[d.source_lon,d.source_lat], getTargetPosition:d=>[d.target_lon,d.target_lat],
+    getSourceColor:[136,212,255,220], getTargetColor:[255,107,157,220],
+    getWidth:d=>Math.max(1, Math.log10((d.flow||1))*2)}));
+  if(visible.poi){
+    const colors={climbing:[255,107,107],yoga:[196,163,255],hospital:[61,220,151],pharmacy:[255,209,102]};
+    for(const [cat,arr] of Object.entries(PAYLOAD.pois)){
+      layers.push(new ScatterplotLayer({id:'poi-'+cat, data:arr, getPosition:d=>[d.lon,d.lat],
+        getRadius:200, getFillColor:colors[cat]||[255,255,255], radiusMinPixels:3, radiusMaxPixels:10}));
+    }
+  }
+  return layers;
+}
+const deckgl = new DeckGL({container:'map', mapStyle:PAYLOAD.basemap, initialViewState:PAYLOAD.initial_view, controller:true, layers:build()});
+['hex','arc','poi'].forEach(k=>document.getElementById('t-'+k).addEventListener('change',e=>{visible[k]=e.target.checked; deckgl.setProps({layers:build()});}));
+console.log('catmob deck export — '+PAYLOAD.hexes.length+' hexes, '+PAYLOAD.arcs.length+' arcs, '+Object.keys(PAYLOAD.pois).length+' POI categories');
+</script>
+</body>
+</html>
+"""
+
+
+def _replace_title(html: str, title: str) -> str:
+    return html.replace("__TITLE_PLACEHOLDER__", title)
+
+
+# Patch: do title injection + payload injection in one pass.
+def _render_template(payload: dict) -> str:
+    return _replace_title(_HTML_TEMPLATE, payload["title"]).replace(
+        "__PAYLOAD_JSON__", json.dumps(payload)
+    )
+
+
+# Re-bind export to use the cleaner renderer.
+def export_deck_html(  # noqa: F811
+    out_path: Path | str,
+    hexes: pd.DataFrame,
+    *,
+    arcs: pd.DataFrame | None = None,
+    pois: Mapping[str, pd.DataFrame] | None = None,
+    title: str = "Catalonia Liveability — final scoring",
+    initial_view: tuple[float, float, float, float] = (1.7, 41.6, 8.0, 45.0),
+    basemap: str = DEFAULT_BASEMAP,
+) -> Path:
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "title": title,
+        "initial_view": {
+            "longitude": initial_view[0], "latitude": initial_view[1],
+            "zoom": initial_view[2], "pitch": initial_view[3], "bearing": 0,
+        },
+        "hexes": hexes[["h3_id", "liveability_score"]].head(60_000).to_dict(orient="records"),
+        "arcs": (arcs[["source_lon","source_lat","target_lon","target_lat","flow"]]
+                 .head(5_000).to_dict(orient="records")) if arcs is not None and not arcs.empty else [],
+        "pois": {cat: df[["lon", "lat", "name"]].head(5_000).to_dict(orient="records")
+                 for cat, df in (pois or {}).items() if df is not None and not df.empty},
+        "basemap": basemap,
+    }
+    out_path.write_text(_render_template(payload), encoding="utf-8")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Lonboard / pydeck thin wrappers (used by notebook 03)
+# ---------------------------------------------------------------------------
+
+def lonboard_arcs_from_sedona(sdf, *, get_width: str = "viajes / 1000"):
+    """Convert a Sedona DataFrame of OD lines to a Lonboard ArcLayer (zero-copy)."""
+    from sedona.spark import dataframe_to_arrow
+    import lonboard
+
+    arrow = dataframe_to_arrow(sdf, crs="EPSG:4326")
+    return lonboard.ArcLayer.from_arrow(
+        arrow,
+        get_source_position="source_pt",
+        get_target_position="target_pt",
+        get_width=get_width,
+    )

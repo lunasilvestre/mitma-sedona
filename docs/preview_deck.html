@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Catalonia Liveability — Preview Stack (synthetic data)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://unpkg.com/deck.gl@9.3.2/dist.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; background: #0a0e1a; color: #e8eaf2; overflow: hidden; }
+  #map { position: absolute; inset: 0; }
+  .panel {
+    position: absolute; background: rgba(14, 18, 30, 0.92);
+    backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 14px 16px; font-size: 12px; line-height: 1.4;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  }
+  #header { top: 12px; left: 12px; max-width: 360px; }
+  #header h1 { margin: 0 0 6px; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+  #header p { margin: 0 0 4px; color: #a0a8c0; }
+  #header .badge { display: inline-block; padding: 2px 6px; margin-right: 4px; border-radius: 3px; background: rgba(120,200,255,0.18); color: #88d4ff; font-size: 10px; font-weight: 500; }
+  #header .warn { color: #ffd47b; font-weight: 500; }
+  #controls { top: 12px; right: 12px; min-width: 220px; }
+  #controls h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #a0a8c0; text-transform: uppercase; letter-spacing: 0.05em; }
+  #controls label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  #controls label .swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+  #controls input[type=checkbox] { accent-color: #88d4ff; }
+  #controls .slider { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 4px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px; }
+  #controls .slider .row { display: flex; justify-content: space-between; font-size: 11px; color: #a0a8c0; }
+  #controls input[type=range] { width: 100%; accent-color: #88d4ff; }
+  #legend { bottom: 12px; left: 12px; max-width: 320px; }
+  #legend h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #a0a8c0; text-transform: uppercase; letter-spacing: 0.05em; }
+  #legend .scale { display: flex; height: 10px; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  #legend .scale span { flex: 1; }
+  #legend .ticks { display: flex; justify-content: space-between; font-size: 10px; color: #a0a8c0; }
+  #ranked { bottom: 12px; right: 12px; max-width: 320px; max-height: 38vh; overflow-y: auto; }
+  #ranked h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #a0a8c0; text-transform: uppercase; letter-spacing: 0.05em; }
+  #ranked table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #ranked th, #ranked td { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  #ranked th { color: #a0a8c0; font-weight: 500; }
+  #ranked td.score { color: #88d4ff; font-weight: 600; text-align: right; }
+  #ranked tr:hover { background: rgba(120,200,255,0.08); cursor: pointer; }
+  #tooltip {
+    position: absolute; pointer-events: none; padding: 8px 10px;
+    background: rgba(14, 18, 30, 0.95); border: 1px solid rgba(120,200,255,0.4);
+    border-radius: 6px; font-size: 11px; line-height: 1.5; color: #e8eaf2;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5); display: none; z-index: 100;
+    max-width: 280px;
+  }
+  #tooltip .title { font-weight: 600; color: #88d4ff; margin-bottom: 4px; }
+  #tooltip .row { display: flex; justify-content: space-between; gap: 12px; }
+  #tooltip .row span:first-child { color: #a0a8c0; }
+  .maplibregl-control-container { display: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="tooltip"></div>
+
+<div id="header" class="panel">
+  <h1>Catalonia Liveability × Mobility</h1>
+  <p><span class="badge">deck.gl 9.3</span><span class="badge">H3 res 7</span><span class="badge">MapLibre + CARTO</span></p>
+  <p>Preliminary stack preview. Hex extrusion = liveability score. Arcs = MITMA OD flows from Barcelona Sants. Dots = climbing & yoga POIs. Hold <b>Ctrl</b> + drag to rotate.</p>
+  <p class="warn">⚠ Synthetic data — final pipeline reads MITMA v2 + OSM Cataluña + EEA/XVPCA + Landsat LST + WDPA.</p>
+</div>
+
+<div id="controls" class="panel">
+  <h2>Layers</h2>
+  <label><input type="checkbox" id="toggle-hex" checked /><span class="swatch" style="background: linear-gradient(90deg,#3a1f5d,#7a2d6e,#c44569,#ff8b3d,#ffd166);"></span> Liveability score (3D)</label>
+  <label><input type="checkbox" id="toggle-arc" checked /><span class="swatch" style="background: linear-gradient(90deg,#88d4ff,#ff6b9d);"></span> MITMA OD arcs from BCN</label>
+  <label><input type="checkbox" id="toggle-flow" /><span class="swatch" style="background: #ffd166;"></span> Aggregated flow lines</label>
+  <label><input type="checkbox" id="toggle-climb" checked /><span class="swatch" style="background: #ff6b6b;"></span> Climbing gyms</label>
+  <label><input type="checkbox" id="toggle-yoga" checked /><span class="swatch" style="background: #c4a3ff;"></span> Yoga studios</label>
+  <label><input type="checkbox" id="toggle-rail" /><span class="swatch" style="background: #3ddc97;"></span> Train stations</label>
+  <div class="slider">
+    <div class="row"><span>Hex extrusion</span><span id="elev-val">100×</span></div>
+    <input type="range" id="elev-slider" min="0" max="500" value="100" step="10" />
+  </div>
+  <div class="slider">
+    <div class="row"><span>Arc thickness</span><span id="arc-val">4 px</span></div>
+    <input type="range" id="arc-slider" min="1" max="12" value="4" step="1" />
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h2>Liveability score</h2>
+  <div class="scale">
+    <span style="background:#3a1f5d"></span>
+    <span style="background:#7a2d6e"></span>
+    <span style="background:#c44569"></span>
+    <span style="background:#ff8b3d"></span>
+    <span style="background:#ffd166"></span>
+  </div>
+  <div class="ticks"><span>0 (poor)</span><span>50</span><span>100 (best)</span></div>
+  <p style="margin: 8px 0 0; font-size: 11px; color: #a0a8c0;">Composite of: train+bike reach, climb/yoga proximity, green/sea distance, air quality (NO₂, PM₂.₅), UHI delta, light pollution, biodiversity coverage, hospital reach. Penalties for industry density and motorway noise.</p>
+</div>
+
+<div id="ranked" class="panel">
+  <h2>Top 10 hexes (synthetic)</h2>
+  <table>
+    <thead><tr><th>Rank</th><th>Locality</th><th class="score">Score</th></tr></thead>
+    <tbody id="ranked-body"></tbody>
+  </table>
+</div>
+
+<script>
+// =========================================================================
+// SYNTHETIC DATA — production replaces this with reads from gold/ Parquet.
+// Coordinates are WGS84.
+// =========================================================================
+const STATIONS = [
+  { id: 'BCN_SANTS',     name: 'Barcelona Sants',      lon: 2.140, lat: 41.379, trains_per_day: 1240, trains_to_bcn: 1240 },
+  { id: 'SABADELL',      name: 'Sabadell Centre',      lon: 2.103, lat: 41.547, trains_per_day: 220,  trains_to_bcn: 220 },
+  { id: 'GIRONA',        name: 'Girona',               lon: 2.823, lat: 41.978, trains_per_day: 88,   trains_to_bcn: 64 },
+  { id: 'TARRAGONA',     name: 'Tarragona',            lon: 1.252, lat: 41.117, trains_per_day: 110,  trains_to_bcn: 84 },
+  { id: 'MATARO',        name: 'Mataró',               lon: 2.444, lat: 41.539, trains_per_day: 192,  trains_to_bcn: 192 },
+  { id: 'LLEIDA',        name: 'Lleida-Pirineus',      lon: 0.624, lat: 41.620, trains_per_day: 56,   trains_to_bcn: 42 },
+  { id: 'MANRESA',       name: 'Manresa',              lon: 1.838, lat: 41.728, trains_per_day: 92,   trains_to_bcn: 80 },
+  { id: 'VILANOVA',      name: 'Vilanova i la Geltrú', lon: 1.732, lat: 41.225, trains_per_day: 168,  trains_to_bcn: 168 },
+  { id: 'VIC',           name: 'Vic',                  lon: 2.255, lat: 41.928, trains_per_day: 64,   trains_to_bcn: 56 },
+  { id: 'SITGES',        name: 'Sitges',               lon: 1.811, lat: 41.236, trains_per_day: 156,  trains_to_bcn: 156 },
+  { id: 'SANT_CUGAT',    name: 'Sant Cugat',           lon: 2.084, lat: 41.474, trains_per_day: 280,  trains_to_bcn: 280 },
+  { id: 'GRANOLLERS',    name: 'Granollers Centre',    lon: 2.288, lat: 41.609, trains_per_day: 188,  trains_to_bcn: 188 },
+  { id: 'CALDES',        name: 'Caldes de Montbui',    lon: 2.167, lat: 41.631, trains_per_day: 32,   trains_to_bcn: 28 },
+  { id: 'ARENYS',        name: 'Arenys de Mar',        lon: 2.547, lat: 41.582, trains_per_day: 144,  trains_to_bcn: 144 },
+  { id: 'CASTELLDEFELS', name: 'Castelldefels',        lon: 1.974, lat: 41.279, trains_per_day: 198,  trains_to_bcn: 198 },
+];
+
+// Pseudo-random with seeded reproducibility
+let _seed = 42;
+function rand() { _seed = (_seed * 9301 + 49297) % 233280; return _seed / 233280; }
+function randn() { return (rand() + rand() + rand() + rand() - 2) * 0.5; }
+
+// Generate H3 res-7 hexes around each station (within ~6 km).
+const HEXES = [];
+const seen = new Set();
+const RES = 7;
+const KM_PER_DEG = 111.0;
+for (const st of STATIONS) {
+  // Sample ~25 hexes per station around its centre
+  for (let i = 0; i < 25; i++) {
+    const dx = (rand() - 0.5) * 0.12;  // ~6 km lon offset
+    const dy = (rand() - 0.5) * 0.10;  // ~5 km lat offset
+    const lon = st.lon + dx;
+    const lat = st.lat + dy;
+    const cell = h3.latLngToCell(lat, lon, RES);
+    if (seen.has(cell)) continue;
+    seen.add(cell);
+    const [hlat, hlon] = h3.cellToLatLng(cell);
+    const distToStationKm = Math.hypot(dx * Math.cos(lat * Math.PI / 180), dy) * KM_PER_DEG;
+    const distToBcnKm = Math.hypot((hlon - 2.140) * Math.cos(hlat * Math.PI / 180), hlat - 41.379) * KM_PER_DEG;
+
+    // Synthetic features (units roughly meaningful)
+    const trainReach = Math.max(0, distToStationKm * 4 + randn() * 3);  // min on bike
+    const climbDist  = Math.max(0, 800 + randn() * 600 + (distToBcnKm > 30 ? 1500 : 0));  // m
+    const yogaDist   = Math.max(0, 600 + randn() * 500 + (distToBcnKm > 25 ? 1800 : 0));
+    const greenDist  = Math.max(0, 500 + randn() * 800);
+    const seaDist    = Math.max(0, Math.abs(hlat - 41.3) * 25000 + randn() * 4000);
+    const industry   = Math.max(0, randn() + 0.5);  // density
+    const motorway   = rand() < 0.18;
+    const no2        = Math.max(5, 25 + randn() * 12 + (distToBcnKm < 8 ? 15 : 0));
+    const pm25       = Math.max(2, 12 + randn() * 4 + (distToBcnKm < 8 ? 5 : 0));
+    const uhi        = randn() * 1.5 + (distToBcnKm < 8 ? 3 : 0);
+    const treeCover  = Math.max(0, 25 + randn() * 25 - (distToBcnKm < 8 ? 15 : 0));
+    const natura     = rand() < 0.25;
+    const hospitalDist = Math.max(0, 1500 + randn() * 1500);
+
+    // Composite score 0–100
+    let score = 50;
+    score += Math.max(0, 20 - trainReach) * 1.4;            // train accessibility
+    score += st.trains_to_bcn / 30;                          // service frequency
+    score -= Math.min(climbDist, 5000) / 200;                // climbing proximity
+    score -= Math.min(yogaDist, 5000) / 250;                 // yoga proximity
+    score -= Math.min(greenDist, 4000) / 200;                // green proximity
+    score += seaDist < 3000 ? 6 : 0;                         // sea bonus
+    score -= industry * 6;                                   // industry penalty
+    score -= motorway ? 12 : 0;                              // motorway noise
+    score -= Math.max(0, no2 - 20) * 0.5;                    // air quality
+    score -= Math.max(0, pm25 - 5) * 1.2;                    // PM2.5
+    score -= Math.max(0, uhi) * 2;                           // UHI penalty
+    score += treeCover * 0.15;                               // tree cover
+    score += natura ? 5 : 0;                                 // protected area
+    score -= Math.min(hospitalDist, 8000) / 400;             // hospital reach
+    score = Math.max(0, Math.min(100, score));
+
+    HEXES.push({
+      h3_id: cell,
+      lon_centroid: hlon,
+      lat_centroid: hlat,
+      nearest_station: st.name,
+      train_reach_min: +trainReach.toFixed(1),
+      trains_to_bcn: st.trains_to_bcn,
+      climb_min_m: +climbDist.toFixed(0),
+      yoga_min_m: +yogaDist.toFixed(0),
+      green_min_m: +greenDist.toFixed(0),
+      sea_min_m: +seaDist.toFixed(0),
+      industry_density: +industry.toFixed(2),
+      motorway_within_500m: motorway,
+      no2_ugm3: +no2.toFixed(1),
+      pm25_ugm3: +pm25.toFixed(1),
+      uhi_delta_c: +uhi.toFixed(1),
+      tree_cover_pct: +treeCover.toFixed(1),
+      natura2000_within_5km: natura,
+      hospital_min_m: +hospitalDist.toFixed(0),
+      liveability_score: +score.toFixed(1),
+    });
+  }
+}
+
+// Synthetic MITMA OD arcs from BCN to other stations (volume-weighted)
+const ARCS = STATIONS.filter(s => s.id !== 'BCN_SANTS').map(st => {
+  const dist = Math.hypot((st.lon - 2.140) * Math.cos(41.4 * Math.PI / 180), st.lat - 41.379) * KM_PER_DEG;
+  const flow = Math.round(8000 / (1 + dist * 0.04) + rand() * 300);
+  return {
+    from: { name: 'Barcelona Sants', lon: 2.140, lat: 41.379 },
+    to:   { name: st.name, lon: st.lon, lat: st.lat },
+    flow,
+    dist_km: +dist.toFixed(1),
+  };
+});
+
+// Synthetic POIs
+const CLIMB_POIS = [
+  { name: 'Sharma Climbing BCN', lon: 2.197, lat: 41.404 },
+  { name: 'Sant Cugat Climbing', lon: 2.085, lat: 41.476 },
+  { name: 'Boulder Sabadell',    lon: 2.105, lat: 41.548 },
+  { name: 'Eivissa Climbing',    lon: 2.155, lat: 41.395 },
+  { name: 'Mataró Vertical',     lon: 2.448, lat: 41.541 },
+  { name: 'Vic Boulder',         lon: 2.260, lat: 41.929 },
+  { name: 'Castelldefels Wall',  lon: 1.978, lat: 41.281 },
+  { name: 'Granollers Boulder',  lon: 2.290, lat: 41.610 },
+  { name: 'Sitges Climb Co.',    lon: 1.815, lat: 41.238 },
+  { name: 'Tarragona Vertical',  lon: 1.255, lat: 41.118 },
+  { name: 'Lleida Boulder',      lon: 0.628, lat: 41.622 },
+  { name: 'Manresa Climbing',    lon: 1.842, lat: 41.731 },
+  { name: 'Vilanova Wall',       lon: 1.736, lat: 41.227 },
+];
+const YOGA_POIS = [
+  { name: 'Yoga Sala BCN',       lon: 2.158, lat: 41.401 },
+  { name: 'Sant Cugat Yoga',     lon: 2.080, lat: 41.475 },
+  { name: 'Sabadell Yoga',       lon: 2.108, lat: 41.546 },
+  { name: 'Mataró Mindful',      lon: 2.446, lat: 41.540 },
+  { name: 'Castelldefels Yoga',  lon: 1.976, lat: 41.278 },
+  { name: 'Sitges Yoga Studio',  lon: 1.813, lat: 41.237 },
+  { name: 'Vilanova Yoga',       lon: 1.734, lat: 41.226 },
+  { name: 'Girona Yoga',         lon: 2.825, lat: 41.980 },
+  { name: 'Tarragona Yoga',      lon: 1.253, lat: 41.119 },
+  { name: 'Granollers Yoga',     lon: 2.291, lat: 41.611 },
+];
+
+// Top-10 ranking
+const TOP10 = [...HEXES].sort((a,b) => b.liveability_score - a.liveability_score).slice(0, 10);
+const tbody = document.getElementById('ranked-body');
+TOP10.forEach((hex, i) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>#${i+1}</td><td>${hex.nearest_station}</td><td class="score">${hex.liveability_score.toFixed(0)}</td>`;
+  tr.addEventListener('click', () => {
+    deckgl.setProps({
+      initialViewState: undefined,
+      viewState: {
+        longitude: hex.lon_centroid, latitude: hex.lat_centroid,
+        zoom: 12, pitch: 50, bearing: 0,
+        transitionDuration: 1000,
+      },
+    });
+  });
+  tbody.appendChild(tr);
+});
+
+// =========================================================================
+// DECK.GL SETUP
+// =========================================================================
+const { DeckGL, H3HexagonLayer, ArcLayer, ScatterplotLayer, LineLayer } = deck;
+
+// Score → RGB (viridis-ish stops to match #legend)
+function scoreColor(s) {
+  const stops = [
+    [58, 31, 93],    // 0
+    [122, 45, 110],  // 25
+    [196, 69, 105],  // 50
+    [255, 139, 61],  // 75
+    [255, 209, 102], // 100
+  ];
+  const t = Math.max(0, Math.min(1, s / 100));
+  const seg = t * (stops.length - 1);
+  const i = Math.min(Math.floor(seg), stops.length - 2);
+  const f = seg - i;
+  return stops[i].map((c, k) => Math.round(c + (stops[i+1][k] - c) * f));
+}
+
+let elevMult = 100;
+let arcWidth = 4;
+const visible = { hex: true, arc: true, flow: false, climb: true, yoga: true, rail: false };
+
+function buildLayers() {
+  const layers = [];
+
+  if (visible.hex) {
+    layers.push(new H3HexagonLayer({
+      id: 'hex-score',
+      data: HEXES,
+      pickable: true,
+      extruded: true,
+      filled: true,
+      stroked: false,
+      getHexagon: d => d.h3_id,
+      getFillColor: d => [...scoreColor(d.liveability_score), 220],
+      getElevation: d => d.liveability_score * elevMult,
+      elevationScale: 1,
+      material: { ambient: 0.35, diffuse: 0.6, shininess: 30, specularColor: [60, 64, 70] },
+      transitions: { getElevation: 400, getFillColor: 400 },
+    }));
+  }
+
+  if (visible.arc) {
+    layers.push(new ArcLayer({
+      id: 'mitma-arcs',
+      data: ARCS,
+      pickable: true,
+      getSourcePosition: d => [d.from.lon, d.from.lat],
+      getTargetPosition: d => [d.to.lon, d.to.lat],
+      getSourceColor: [136, 212, 255, 220],
+      getTargetColor: [255, 107, 157, 220],
+      getWidth: d => Math.max(1, Math.log10(d.flow) * arcWidth),
+      getHeight: 0.4,
+      greatCircle: false,
+      widthMinPixels: 1,
+    }));
+  }
+
+  if (visible.flow) {
+    // Aggregated flow lines (alternative representation)
+    layers.push(new LineLayer({
+      id: 'mitma-flow-lines',
+      data: ARCS,
+      getSourcePosition: d => [d.from.lon, d.from.lat],
+      getTargetPosition: d => [d.to.lon, d.to.lat],
+      getColor: [255, 209, 102, 180],
+      getWidth: d => Math.max(1, Math.log10(d.flow) * 1.6),
+      widthMinPixels: 1,
+    }));
+  }
+
+  if (visible.climb) {
+    layers.push(new ScatterplotLayer({
+      id: 'climb',
+      data: CLIMB_POIS,
+      pickable: true,
+      filled: true,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getPosition: d => [d.lon, d.lat],
+      getRadius: 250,
+      getFillColor: [255, 107, 107, 230],
+      getLineColor: [255, 255, 255, 220],
+      radiusMinPixels: 4,
+      radiusMaxPixels: 12,
+    }));
+  }
+  if (visible.yoga) {
+    layers.push(new ScatterplotLayer({
+      id: 'yoga',
+      data: YOGA_POIS,
+      pickable: true,
+      filled: true,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getPosition: d => [d.lon, d.lat],
+      getRadius: 220,
+      getFillColor: [196, 163, 255, 230],
+      getLineColor: [255, 255, 255, 220],
+      radiusMinPixels: 4,
+      radiusMaxPixels: 11,
+    }));
+  }
+  if (visible.rail) {
+    layers.push(new ScatterplotLayer({
+      id: 'rail',
+      data: STATIONS,
+      pickable: true,
+      filled: true,
+      stroked: true,
+      lineWidthMinPixels: 1.5,
+      getPosition: d => [d.lon, d.lat],
+      getRadius: d => 200 + d.trains_per_day * 0.6,
+      getFillColor: [61, 220, 151, 220],
+      getLineColor: [255, 255, 255, 220],
+      radiusMinPixels: 5,
+      radiusMaxPixels: 18,
+    }));
+  }
+  return layers;
+}
+
+const tooltip = document.getElementById('tooltip');
+function fmtTooltip(info) {
+  if (!info.object) { tooltip.style.display = 'none'; return; }
+  const o = info.object;
+  let html = '';
+  if (info.layer.id === 'hex-score') {
+    html = `<div class="title">Hex ${o.h3_id.slice(0, 9)}…</div>
+      <div class="row"><span>Score</span><b>${o.liveability_score}</b></div>
+      <div class="row"><span>Nearest station</span><b>${o.nearest_station}</b></div>
+      <div class="row"><span>Bike to station</span><b>${o.train_reach_min} min</b></div>
+      <div class="row"><span>Trains to BCN/day</span><b>${o.trains_to_bcn}</b></div>
+      <div class="row"><span>Climbing dist</span><b>${o.climb_min_m} m</b></div>
+      <div class="row"><span>Yoga dist</span><b>${o.yoga_min_m} m</b></div>
+      <div class="row"><span>Green dist</span><b>${o.green_min_m} m</b></div>
+      <div class="row"><span>Sea dist</span><b>${(o.sea_min_m/1000).toFixed(1)} km</b></div>
+      <div class="row"><span>NO₂</span><b>${o.no2_ugm3} µg/m³</b></div>
+      <div class="row"><span>PM₂.₅</span><b>${o.pm25_ugm3} µg/m³</b></div>
+      <div class="row"><span>UHI Δ</span><b>${o.uhi_delta_c} °C</b></div>
+      <div class="row"><span>Tree cover</span><b>${o.tree_cover_pct}%</b></div>
+      <div class="row"><span>Natura 2000 ≤5km</span><b>${o.natura2000_within_5km ? 'yes' : 'no'}</b></div>
+      <div class="row"><span>Motorway ≤500m</span><b>${o.motorway_within_500m ? 'yes' : 'no'}</b></div>`;
+  } else if (info.layer.id === 'mitma-arcs' || info.layer.id === 'mitma-flow-lines') {
+    html = `<div class="title">${o.from.name} → ${o.to.name}</div>
+      <div class="row"><span>Daily trips (synthetic)</span><b>${o.flow.toLocaleString()}</b></div>
+      <div class="row"><span>Distance</span><b>${o.dist_km} km</b></div>`;
+  } else if (info.layer.id === 'climb' || info.layer.id === 'yoga' || info.layer.id === 'rail') {
+    html = `<div class="title">${o.name}</div>` + (o.trains_per_day ? `<div class="row"><span>Trains/day</span><b>${o.trains_per_day}</b></div>` : '');
+  }
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (info.x + 14) + 'px';
+  tooltip.style.top = (info.y + 14) + 'px';
+}
+
+const deckgl = new DeckGL({
+  container: 'map',
+  mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  initialViewState: {
+    longitude: 1.7, latitude: 41.6, zoom: 8.0, pitch: 45, bearing: 0,
+  },
+  controller: true,
+  layers: buildLayers(),
+  onHover: fmtTooltip,
+});
+
+function refresh() { deckgl.setProps({ layers: buildLayers() }); }
+
+// Wire up controls
+['hex','arc','flow','climb','yoga','rail'].forEach(k => {
+  document.getElementById('toggle-' + k).addEventListener('change', e => {
+    visible[k] = e.target.checked;
+    refresh();
+  });
+});
+document.getElementById('elev-slider').addEventListener('input', e => {
+  elevMult = +e.target.value;
+  document.getElementById('elev-val').textContent = elevMult + '×';
+  refresh();
+});
+document.getElementById('arc-slider').addEventListener('input', e => {
+  arcWidth = +e.target.value;
+  document.getElementById('arc-val').textContent = arcWidth + ' px';
+  refresh();
+});
+
+// Console summary
+console.log(`Catalonia Liveability preview — ${HEXES.length} hexes, ${ARCS.length} OD arcs, ${CLIMB_POIS.length + YOGA_POIS.length} POIs`);
+</script>
+</body>
+</html>

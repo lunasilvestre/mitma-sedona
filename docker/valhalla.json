@@ -1,0 +1,32 @@
+{
+  "_comment": "Valhalla bike-profile config for mitma-sedona. The gisops/valhalla container reads this if mounted at /custom_files/valhalla.json.",
+  "service_limits": {
+    "bicycle": {
+      "max_distance": 200000,
+      "max_locations": 50,
+      "max_matrix_distance": 200000,
+      "max_matrix_locations": 100
+    },
+    "isochrone": {
+      "max_contours": 4,
+      "max_time_contour": 60,
+      "max_distance": 50000,
+      "max_locations": 50,
+      "max_distance_contour": 25
+    }
+  },
+  "thor": {
+    "logging": { "long_request": 110.0 }
+  },
+  "loki": {
+    "service_defaults": {
+      "minimum_reachability": 50,
+      "radius": 0,
+      "search_cutoff": 35000,
+      "node_snap_tolerance": 5,
+      "street_side_tolerance": 5,
+      "street_side_max_distance": 1000,
+      "heading_tolerance": 60
+    }
+  }
+}

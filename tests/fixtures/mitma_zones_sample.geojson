@@ -1,0 +1,32 @@
+{
+  "type": "FeatureCollection",
+  "name": "mitma_zones_sample",
+  "crs": {"type": "name", "properties": {"name": "EPSG:4326"}},
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"id": "08019_AC02", "name": "Eixample-Esquerra", "municipio_id": "08019", "provincia": "08"},
+      "geometry": {"type": "Polygon", "coordinates": [[[2.150, 41.385], [2.165, 41.385], [2.165, 41.395], [2.150, 41.395], [2.150, 41.385]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "08019_AC03", "name": "Eixample-Dreta", "municipio_id": "08019", "provincia": "08"},
+      "geometry": {"type": "Polygon", "coordinates": [[[2.165, 41.385], [2.180, 41.385], [2.180, 41.395], [2.165, 41.395], [2.165, 41.385]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "08019_AC04", "name": "Sant-Marti", "municipio_id": "08019", "provincia": "08"},
+      "geometry": {"type": "Polygon", "coordinates": [[[2.190, 41.395], [2.220, 41.395], [2.220, 41.420], [2.190, 41.420], [2.190, 41.395]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "17079_AC01", "name": "Girona-Centre", "municipio_id": "17079", "provincia": "17"},
+      "geometry": {"type": "Polygon", "coordinates": [[[2.815, 41.975], [2.835, 41.975], [2.835, 41.990], [2.815, 41.990], [2.815, 41.975]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "43148_AC01", "name": "Tarragona-Centre", "municipio_id": "43148", "provincia": "43"},
+      "geometry": {"type": "Polygon", "coordinates": [[[1.245, 41.110], [1.260, 41.110], [1.260, 41.125], [1.245, 41.125], [1.245, 41.110]]]}
+    }
+  ]
+}

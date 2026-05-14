@@ -1,0 +1,65 @@
+# Liveability scoring weight presets.
+#
+# Loaded by `src/catmob/scoring.py:load_weights(preset)`.
+# Each entry mirrors the constraint table in PLAN.md §2.
+# Weights are signed: positive = preference, negative = penalty.
+# All scores are computed in points and the final sum is clipped to [0, 100].
+
+default:
+  # Mobility & accessibility
+  train_reach_per_min_under25: 1.4
+  trains_to_bcn_per_30: 1.0
+  # Lifestyle amenities
+  climb_per_200m: -1.0
+  yoga_per_250m: -1.0
+  # Nature
+  green_per_200m: -1.0
+  sea_within_3km_bonus: 6.0
+  tree_cover_pct: 0.15
+  natura2000_within_5km: 5.0
+  biodiversity_obs_log: 1.0
+  # Environmental health
+  no2_above_who_per_ugm3: -0.5
+  pm25_above_who_per_ugm3: -1.2
+  uhi_per_degree: -2.0
+  viirs_radiance: -0.05
+  # Penalties
+  industry_density: -6.0
+  eprtr_inverse_dist: -0.001
+  motorway_within_500m: -12.0
+  # Health amenities
+  hospital_per_400m: -1.0
+  pharmacy_density_log: 1.0
+  # Mobility "vibe check" (off by default — set positive to penalise busy through-flow)
+  mitma_through_ratio: 0.0
+  # Score offset
+  base_offset: 50.0
+
+nature_first:
+  # Halve lifestyle, double nature
+  climb_per_200m: -0.5
+  yoga_per_250m: -0.5
+  green_per_200m: -2.0
+  sea_within_3km_bonus: 12.0
+  tree_cover_pct: 0.30
+  natura2000_within_5km: 10.0
+  biodiversity_obs_log: 2.0
+
+quiet_strict:
+  # Triple noise/heat/air penalties
+  no2_above_who_per_ugm3: -1.5
+  pm25_above_who_per_ugm3: -3.6
+  uhi_per_degree: -6.0
+  motorway_within_500m: -36.0
+  industry_density: -18.0
+  mitma_through_ratio: -0.5  # quiet bias on
+  viirs_radiance: -0.15
+
+amenity_first:
+  # Double lifestyle + health amenities, halve biodiversity
+  climb_per_200m: -2.0
+  yoga_per_250m: -2.0
+  hospital_per_400m: -2.0
+  pharmacy_density_log: 2.0
+  natura2000_within_5km: 2.5
+  biodiversity_obs_log: 0.5

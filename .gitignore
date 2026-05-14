@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.Python
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+uv.lock.bak
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+notebooks/rendered/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data lake — gitignored, rebuilt by scripts/fetch_*.sh + notebooks
+data/bronze/
+data/silver/
+data/gold/
+
+# Valhalla tiles
+docker/valhalla_tiles/
+
+# Local environment overrides
+.env
+.env.local
+
+# Logs
+*.log
+logs/

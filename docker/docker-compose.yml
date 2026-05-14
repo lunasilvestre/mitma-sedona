@@ -1,0 +1,69 @@
+# mitma-sedona — Sedona/Spark + Valhalla + JupyterLab
+#
+# Bring up:   docker compose -f docker/docker-compose.yml up -d
+# Logs:       docker compose -f docker/docker-compose.yml logs -f jupyter
+# Tear down:  docker compose -f docker/docker-compose.yml down
+#
+# Volumes mounted from the repo root:
+#   ./       → /workspace          (notebooks, src, data, configs)
+#   ./data   → /data               (gitignored, persists across restarts)
+
+services:
+
+  jupyter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.jupyter
+    image: mitma-sedona/jupyter:latest
+    container_name: mitma-sedona-jupyter
+    ports:
+      - "8888:8888"   # JupyterLab
+      - "4040:4040"   # Spark UI (driver)
+    volumes:
+      - ../:/workspace
+      - ../data:/data
+    working_dir: /workspace
+    environment:
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-mitma}
+      - PYTHONPATH=/workspace/src
+      - SPARK_LOCAL_DIRS=/tmp/spark
+      - SEDONA_VERSION=1.9.0
+      # Tune Spark for atlas (12 cores typical)
+      - SPARK_DRIVER_MEMORY=8g
+      - SPARK_EXECUTOR_MEMORY=4g
+      - SPARK_LOCAL_IP=0.0.0.0
+    command: >
+      bash -c "jupyter lab
+        --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+        --ServerApp.token=${JUPYTER_TOKEN:-mitma}
+        --ServerApp.password=''
+        --ServerApp.allow_origin='*'"
+    restart: unless-stopped
+    depends_on:
+      valhalla:
+        condition: service_healthy
+
+  valhalla:
+    image: gisops/valhalla:latest
+    container_name: mitma-sedona-valhalla
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./valhalla_tiles:/custom_files
+      - ../data/bronze/osm:/osm_data:ro
+    environment:
+      - tile_urls=https://download.geofabrik.de/europe/spain/cataluna-latest.osm.pbf
+      - serve_tiles=True
+      - build_admins=True
+      - use_tiles_ignore_pbf=False
+      - force_rebuild=False
+      - server_threads=4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 5m
+    restart: unless-stopped
+
+# No top-level network; both services share the default compose bridge.

@@ -1,0 +1,11 @@
+fecha;periodo;origen;destino;distancia;actividad_origen;actividad_destino;residencia;renta;edad;sexo;viajes;viajes_km
+20241015;7;08019_AC02;08019_AC03;0.5-2;casa;trabajo_estudio;08;10-15;25-45;hombre;42.3;54.7
+20241015;7;08019_AC02;08019_AC03;2-10;casa;trabajo_estudio;08;10-15;25-45;mujer;88.1;337.0
+20241015;8;08019_AC02;08019_AC03;0.5-2;casa;trabajo_estudio;08;10-15;25-45;hombre;55.2;71.4
+20241015;8;08019_AC02;08019_AC03;2-10;casa;trabajo_estudio;08;10-15;25-45;mujer;102.4;391.8
+20241015;9;08019_AC02;08019_AC03;0.5-2;casa;trabajo_estudio;08;10-15;25-45;hombre;28.7;37.1
+20241015;17;08019_AC03;08019_AC02;0.5-2;trabajo_estudio;casa;08;10-15;25-45;hombre;51.0;65.9
+20241015;18;08019_AC03;08019_AC02;0.5-2;trabajo_estudio;casa;08;10-15;25-45;hombre;65.4;84.5
+20241015;19;08019_AC03;08019_AC02;0.5-2;trabajo_estudio;casa;08;10-15;25-45;mujer;71.2;92.0
+20241015;0;08019_AC02;08019_AC02;0.5-2;casa;casa;08;10-15;25-45;NA;1.2;1.5
+20241015;13;08019_AC02;08019_AC04;2-10;casa;frecuente;08;>15;45-65;mujer;33.4;162.7
