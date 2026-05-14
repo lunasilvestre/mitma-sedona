@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-readonly BASE_URL="https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes"
+readonly BASE_URL="https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes"
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly DEST_ROOT="${REPO_ROOT}/data/bronze/mitma"
 

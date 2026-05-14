@@ -19,7 +19,7 @@
 #
 # | Inputs | Where |
 # |---|---|
-# | MITMA v2 OD CSV.gz (daily Q1+Q2 2024 + hourly all March 2024) | `https://opendata-movilidad.mitma.es/` |
+# | MITMA v2 OD CSV.gz (daily Q1+Q2 2024 + hourly all March 2024) | `https://movilidad-opendata.mitma.es/` |
 # | OSM Cataluña PBF (~250 MB → ~50 MB after osmium prune) | Geofabrik |
 # | Renfe Rodalies + FGC GTFS | transitfeeds + fgc.cat |
 # | EEA + XVPCA + Copernicus CAMS | discomap.eea.europa.eu / analisi.transparenciacatalunya.cat / CAMS |
@@ -85,7 +85,7 @@ print("Sedona session up. Spark UI on http://localhost:4040")
 # %% [markdown]
 # ## 1. MITMA daily OD
 #
-# Pull from `https://opendata-movilidad.mitma.es/`, filter to Catalonia at the
+# Pull from `https://movilidad-opendata.mitma.es/`, filter to Catalonia at the
 # SQL level (rows where origin OR destination province ∈ {08, 17, 25, 43}).
 # We rely on the Spark CSV reader with `;`-delimiter and explicit schema (see
 # `src/catmob/io_mitma.py`).

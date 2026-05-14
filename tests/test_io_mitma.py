@@ -96,7 +96,7 @@ def test_catalonia_filter_off_keeps_more(mitma_daily_fixture: Path) -> None:
 def test_build_url_daily_matches_documented_layout() -> None:
     url = io_mitma.build_url("daily", "2024-10-15")
     assert url == (
-        "https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/"
+        "https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/"
         "viajes/ficheros-diarios/2024-10/20241015_Viajes_distritos.csv.gz"
     )
 
@@ -104,7 +104,7 @@ def test_build_url_daily_matches_documented_layout() -> None:
 def test_build_url_hourly_matches_documented_layout() -> None:
     url = io_mitma.build_url("hourly", "2024-10-15")
     assert url == (
-        "https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/"
+        "https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/"
         "viajes/2024-10/20241015_Viajes_distritos.csv.gz"
     )
 

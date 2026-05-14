@@ -32,7 +32,7 @@ _EDAD_VALUES = ["0-25", "25-45", "45-65", "65-100", "NA"]
 _SEXO_VALUES = ["hombre", "mujer", "NA"]
 
 #: Daily OD flows, distritos zoning, MITMA v2 (2022-onwards).
-#: Source: ``opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios``.
+#: Source: ``movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios``.
 MITMA_DAILY_OD_SCHEMA = pa.DataFrameSchema(
     {
         # YYYYMMDD as string (no Date parsing — we keep the raw token).

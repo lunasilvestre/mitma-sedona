@@ -5,7 +5,7 @@ set -euo pipefail
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly DEST="${REPO_ROOT}/data/bronze/mitma/zones"
-readonly BASE="https://opendata-movilidad.mitma.es/zonificacion"
+readonly BASE="https://movilidad-opendata.mitma.es/zonificacion"
 
 mkdir -p "$DEST"
 

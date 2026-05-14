@@ -1,6 +1,6 @@
 """MITMA v2 OD-flow loader.
 
-Source bucket: ``https://opendata-movilidad.mitma.es/``
+Source bucket: ``https://movilidad-opendata.mitma.es/``
 
 Two file kinds matter for this project:
 
@@ -31,7 +31,7 @@ from .schemas import MITMA_DAILY_OD_SCHEMA, MITMA_HOURLY_OD_SCHEMA
 # Catalonia province codes (INE) — used to filter zone-ID prefixes early.
 CATALONIA_PROVINCE_PREFIXES: tuple[str, ...] = ("08", "17", "25", "43")
 
-MITMA_BASE_URL = "https://opendata-movilidad.mitma.es"
+MITMA_BASE_URL = "https://movilidad-opendata.mitma.es"
 
 
 @dataclass(frozen=True)
@@ -123,9 +123,9 @@ def build_url(kind: str, date: str) -> str:
     Examples
     --------
     >>> build_url("daily", "2024-10-15")
-    'https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios/2024-10/20241015_Viajes_distritos.csv.gz'
+    'https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios/2024-10/20241015_Viajes_distritos.csv.gz'
     >>> build_url("hourly", "2024-10-15")
-    'https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes/2024-10/20241015_Viajes_distritos.csv.gz'
+    'https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes/2024-10/20241015_Viajes_distritos.csv.gz'
     """
     if kind not in {"daily", "hourly"}:
         raise ValueError(f"kind must be 'daily' or 'hourly', got {kind!r}")

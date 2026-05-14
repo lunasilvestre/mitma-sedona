@@ -35,9 +35,9 @@ data/
 
 | Dataset | Source URL | Licence | Format | CRS | Refresh | Schema |
 |---|---|---|---|---|---|---|
-| MITMA v2 daily OD distritos | `https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios/<YYYY-MM>/` | MITMA Open Data ≈ CC BY 4.0 | CSV.gz, `;`-delim, UTF-8 | n/a | monthly | `MITMA_DAILY_OD_SCHEMA` |
-| MITMA v2 hourly OD distritos | `https://opendata-movilidad.mitma.es/estudios_basicos/por-distritos/viajes/<YYYY-MM>/` | same | CSV.gz, `;`-delim, UTF-8 | n/a | monthly | `MITMA_HOURLY_OD_SCHEMA` |
-| MITMA distritos zoning | `https://opendata-movilidad.mitma.es/zonificacion/zonificacion_distritos.*` | same | Shapefile + GeoJSON | EPSG:4326 | annual | `MITMA_ZONE_SCHEMA` |
+| MITMA v2 daily OD distritos | `https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes/ficheros-diarios/<YYYY-MM>/` | MITMA Open Data ≈ CC BY 4.0 | CSV.gz, `;`-delim, UTF-8 | n/a | monthly | `MITMA_DAILY_OD_SCHEMA` |
+| MITMA v2 hourly OD distritos | `https://movilidad-opendata.mitma.es/estudios_basicos/por-distritos/viajes/<YYYY-MM>/` | same | CSV.gz, `;`-delim, UTF-8 | n/a | monthly | `MITMA_HOURLY_OD_SCHEMA` |
+| MITMA distritos zoning | `https://movilidad-opendata.mitma.es/zonificacion/zonificacion_distritos.*` | same | Shapefile + GeoJSON | EPSG:4326 | annual | `MITMA_ZONE_SCHEMA` |
 | Renfe Rodalies GTFS | `https://transitfeeds.com/p/renfe/505` | open | GTFS zip | EPSG:4326 | quarterly | `GTFS_STOPS_SCHEMA`, `GTFS_FREQUENCY_SCHEMA` |
 | FGC GTFS | `https://transit.land/feeds/f-fgc` | open | GTFS zip | EPSG:4326 | quarterly | same |
 
