@@ -1,12 +1,37 @@
 # mitma-sedona — Catalonia Liveability × Mobility Planning Doc
 
-**Status:** Draft v1.2 (full-scale by default) · **Date:** 2026-05-14 · **Author:** Nelson + Claude (atlas)
+**Status:** Draft v1.3 (breakthrough → working prototype) · **Date:** 2026-05-14 · **Author:** Nelson + Claude (atlas + Cowork)
 
 > **The real question** — *Where in Catalonia could I live well? Within bike-reach of a train station that connects to Barcelona, with climbing gyms and yoga nearby, close to green or sea, away from heavy industry and motorway noise — and now also: clean air, low urban heat, low light pollution, near biodiversity, with health amenities at hand.*
 
-Started as "regional mobility analysis with Sedona". Reframed as a personal liveability search. Expanded to environmental health and biodiversity. Now scaled up: **using Sedona on a one-month sample defeats the point of Spark.** Default is full-scale; a `--scope dev` switch exists only for fast local iteration.
+Started as "regional mobility analysis with Sedona". Reframed as a personal liveability search. Expanded to environmental health and biodiversity. Scaled up to full-scale by default. Now (v1.3) we have a clear path to a **working prototype** — see §15.
 
-**Repo layout:** local at `/home/nls/Documents/dev/mitma-sedona`, GitHub target `lunasilvestre/mitma-sedona` (public). All future work lives in this directory; the previous `catalonia-livability-mobility/` was renamed in place.
+**Repo layout:** local at `/home/nls/Documents/dev/mitma-sedona`, GitHub target `lunasilvestre/mitma-sedona` (public). Pages live at `https://lunasilvestre.github.io/mitma-sedona/`. CI green on Python 3.11 + 3.12.
+
+---
+
+## 15. Breakthrough — what's actually missing for a working prototype
+
+We're closer than the open-issues list makes it look. The repo already has:
+the data on disk (1.4 GB MITMA + 251 MB OSM PBF + 25 MB MITMA zoning incl. 60 MB GeoJSON), every parser implementation, every schema, the scoring function, the deck.gl HTML exporter, and 44 green tests. The **only** thing missing for "I can show this to a recruiter and click around real Catalonia data" is **a Spark+Sedona runtime that can execute notebook 01 once**.
+
+### The breakthrough: stop chasing Docker, install Spark+Sedona directly on atlas.
+
+Docker compose builds have failed four times (PEP 668 numpy uninstall, GHCR auth for Valhalla, etc.). Each fix produces a new failure mode. **Skip the container for v1.** Atlas already has Java available via apt, Python 3.13, plenty of disk; a venv at `/home/nls/Documents/dev/mitma-sedona/.venv-spark` with `pip install pyspark>=3.5 'apache-sedona[spark]>=1.9'` gets us a working SedonaContext in ~3 minutes. Once the pipeline produces the gold parquet on real data, **everything cascades** — deck.gl HTML with real flows, descriptive-stats charts, README screenshots. The Docker container becomes a "reproducibility for outside contributors" concern, not a blocker for our prototype.
+
+### What "working prototype" means concretely
+
+1. `data/gold/h3_res8_catalonia.parquet` exists, ~50k hexes, all 25 columns populated (some from real data, some from sensible fallbacks where a source is deferred).
+2. `docs/catalonia_liveability.html` shows real Catalonia hexes coloured by liveability, real MITMA OD arcs from BCN, real climbing/yoga POIs from OSM. Replaces (or sits alongside) `docs/preview_deck.html`.
+3. `docs/screenshots/{01..08}.png` — 8 publication-quality charts from notebook 04 (weekday vs weekend, hourly heatmap, per-province, anomaly days, etc.).
+4. README updated with embedded screenshots + a "what I learned" paragraph.
+5. Top-10 hex ranking printed in notebook 03, with municipality names; the actual answer to the original question.
+
+### Why we ship the prototype with circular-buffer fallbacks (not Valhalla)
+
+Valhalla bike isochrones are a *quality* improvement on the train-reach feature. The fallback — a 5 km Euclidean buffer around each train station, weighted by service frequency — is 80% as informative for 5% of the work. Ship the prototype with circular buffers; document Valhalla as "v2 — replace bike-reach feature with real road-network isochrones." This is a portfolio piece, not a contract; clarity about the simplification beats a missing demo.
+
+---
 
 ---
 
@@ -325,17 +350,26 @@ Per `notebooks/preview_storyboard.md` (full table); summary:
 
 ---
 
-## 10. Milestones
+## 10. Milestones (revised v1.3)
 
 | # | Milestone | Status |
 |---|---|---|
 | **M0** | Plan + schemas + tests + preview HTML + data catalog | ✅ shipped |
-| M1 | Repo skeleton + Docker stack boots + GitHub repo created | next — assign Prompt A |
-| M2 | Bronze layer for all 8 source families, schema-validated | Prompt B |
-| M3 | Silver + Gold (50k hexes, all 25 features) | Prompt C |
-| M4 | Notebooks 03 + 04 + hosted HTML demo | Prompt D (or Cowork) |
-| M5 | README + screenshots + GitHub Pages | Cowork |
-| M6 | OB1 capture + vault wiki page + decision log | Cowork |
+| **M1** | Repo skeleton + GitHub repo created + CI green + Pages live | ✅ shipped (`https://lunasilvestre.github.io/mitma-sedona/`) |
+| **M2** | Bronze layer parsers + STAC fetchers (real Sedona path for MITMA + OSM + GTFS, stubs filled for thermal/biodiversity/pollution/health) | ✅ shipped |
+| **M3** | h3_utils + scoring + isochrones + viz library code | ✅ shipped |
+| **M4** | 4 jupytext notebooks (01-04) | ✅ shipped (not yet executed on real data) |
+| **M5** | Push to GitHub + Pages auto-deploy | ✅ shipped |
+| **M6** | **Spark stack on atlas — first real Sedona run on dev-scope MITMA** | next — Prompt α |
+| **M7** | **Real gold parquet (~50k hexes) from dev-scope** | Prompt α (continues) |
+| **M8** | **Real visualisations + screenshots** (`docs/catalonia_liveability.html` + `docs/screenshots/*.png`) | Prompt α (continues) |
+| **M9** | **README polish with embedded screenshots + commit + push** | Cowork (after α) |
+| M10 | GTFS fetcher fix + scripts/fetch_all.sh orchestrator | Prompt β (parallel) |
+| M11 | Notebook execution Makefile + jupytext sync hook + nbmake CI | Prompt γ (parallel) |
+| M12 | Docker container for outside reproducibility | deferred (v1.1) |
+| M13 | Valhalla bike isochrones (replaces circular-buffer fallback) | deferred (v2) |
+| M14 | Full-scale run (Q1+Q2 2024 daily + all March hourly) | deferred (after dev-scope works) |
+| M15 | OB1 / Wiki capture, decision log, blog post | Cowork (later) |
 
 ---
 
@@ -345,7 +379,196 @@ Cowork keeps the strategic loop and visual review. Claude Code on atlas does the
 
 > **Run prompts A & B (and C, D) from `/home/nls/Documents/dev/mitma-sedona/`** — that is the canonical working directory. The previous `catalonia-livability-mobility/` folder was renamed in place, all schemas/tests/preview already live here.
 
-### Prompt A — Setup & infra (M1)
+### Prompt α — **WORKING PROTOTYPE on atlas (M6+M7+M8)** ⭐ critical path
+
+```
+Repo: /home/nls/Documents/dev/mitma-sedona
+You are getting this project to a WORKING PROTOTYPE on real Catalonia data.
+Read PLAN.md §0, §15, and the file tree before doing anything; the schemas,
+parsers, scoring, viz helpers, and 4 jupytext notebooks are all in place
+and 44 contract tests pass. The data is on disk:
+  - data/bronze/mitma/daily/2024-03/  → 7 days × ~190 MB CSV.gz
+  - data/bronze/mitma/zones/          → SHP + 60 MB GeoJSON in EPSG:4326
+  - data/bronze/osm/cataluna-latest.osm.pbf → 251 MB
+
+Goal: end the session with these committed + pushed:
+  - data/gold/h3_res8_catalonia.parquet (sample committed via Git LFS or
+    a 5k-hex sample if too big)
+  - docs/catalonia_liveability.html (real data, replaces preview at /demo)
+  - docs/screenshots/{01..08}.png (notebook 04 charts)
+  - notebooks/rendered/0{1,2,3,4}.{ipynb,md} via nbconvert
+  - README.md updated with embedded screenshots + a "results" section
+
+Steps (skip Docker entirely for v1 per PLAN.md §15):
+
+1. SPARK STACK on atlas (~3 min)
+   python3 -m venv .venv-spark
+   source .venv-spark/bin/activate
+   pip install --upgrade pip wheel
+   pip install 'pyspark>=3.5,<5' 'apache-sedona[spark]>=1.9' \
+       'pandera[pandas]>=0.20' 'pandas>=2.2' 'numpy>=1.26' 'pyarrow>=17' \
+       'geopandas>=1.0' 'shapely>=2.0' 'h3>=4' \
+       'lonboard>=0.16' 'pydeck>=0.9' 'matplotlib>=3.8' 'altair>=5.3' \
+       'pystac-client>=0.7' 'planetary-computer>=1.0' 'rasterio>=1.3' \
+       'xarray>=2024.1' 'rioxarray>=0.15' 'rasterstats>=0.19' \
+       'pyrosm>=0.6' 'requests>=2.31' 'pyyaml>=6.0' 'ipywidgets>=8.1' \
+       'jupytext>=1.16' 'jupyterlab>=4.2' 'ipykernel>=6.29' 'nbmake>=1.5'
+   # Java check — Sedona needs JDK 11+. If missing: sudo apt install -y openjdk-17-jre-headless
+   java -version || sudo apt-get install -y openjdk-17-jre-headless
+   # Smoke test SedonaContext
+   PYTHONPATH=src python -c "from sedona.spark import SedonaContext; \
+       cfg = SedonaContext.builder().appName('smoke').getOrCreate(); \
+       s = SedonaContext.create(cfg); print('Sedona up:', s.sql('SELECT ST_AsText(ST_Point(1,2))').collect())"
+
+2. NOTEBOOK 01 — bronze ingest on dev scope (~10 min)
+   MITMA_SCOPE=dev jupytext --to ipynb notebooks/01_data_ingest.py
+   PYTHONPATH=src jupyter nbconvert --to notebook --execute \
+       notebooks/01_data_ingest.ipynb \
+       --output rendered/01_data_ingest.ipynb \
+       --ExecutePreprocessor.timeout=900
+   # Expected: data/bronze/mitma_parquet/{daily,hourly}/ + data/bronze/osm/{pois,network}.parquet
+
+3. NOTEBOOK 02 — gold layer (~15 min)
+   # Edit the Valhalla section to use the circular-buffer fallback:
+   # for each station, generate a Shapely.Point.buffer(0.045)  # ~5km in degrees
+   # then convert to a Sedona DataFrame as a synthetic isochrone polygon.
+   # Skip the actual Valhalla call — env var VALHALLA_URL is intentionally absent.
+   PYTHONPATH=src jupyter nbconvert --to notebook --execute \
+       notebooks/02_liveability_layer.ipynb \
+       --output rendered/02_liveability_layer.ipynb \
+       --ExecutePreprocessor.timeout=1800
+   # Expected: data/gold/h3_res8_catalonia.parquet (~50k hexes)
+
+4. NOTEBOOK 03 — visualisations (~10 min)
+   PYTHONPATH=src jupyter nbconvert --to notebook --execute \
+       notebooks/03_score_and_visualise.ipynb \
+       --output rendered/03_score_and_visualise.ipynb \
+       --ExecutePreprocessor.timeout=900
+   # Expected: docs/catalonia_liveability.html with REAL data
+
+5. NOTEBOOK 04 — descriptives (~10 min)
+   PYTHONPATH=src jupyter nbconvert --to notebook --execute \
+       notebooks/04_descriptives.ipynb \
+       --output rendered/04_descriptives.ipynb \
+       --ExecutePreprocessor.timeout=900
+   # Expected: docs/screenshots/{01..08}.png
+
+6. SCREENSHOTS of the deck.gl HTML (~5 min) — use chromium-headless
+   sudo apt-get install -y chromium
+   chromium --headless --disable-gpu --no-sandbox --window-size=1600,900 \
+       --screenshot=/tmp/livmap.png file://$(pwd)/docs/catalonia_liveability.html
+   cp /tmp/livmap.png docs/screenshots/00_main_map.png
+
+7. README.md — append a "Results" section with embedded screenshots,
+   the top-10 hex table from notebook 03 (printed during execution),
+   and a "what I learned" paragraph.
+
+8. Commit + push:
+   git add -A
+   git commit -m "M6+M7+M8: working prototype — real gold layer + viz on dev scope"
+   git push
+
+Verify: report back with row counts (mitma_daily, pois, hexes), gold parquet
+size on disk, screenshots inventory, and the HEAD commit SHA.
+
+Constraints:
+  - DO NOT use Docker. PEP 668 venv on host is faster + reliable.
+  - DO NOT chase Valhalla. Circular buffer is fine for v1.
+  - If a notebook cell fails, FIX IT (most likely a column-name drift
+    or a missing GeoJSON properties path) and continue. Do not skip.
+  - Write a NOTES_FROM_PROTOTYPE_RUN.md at repo root capturing any
+    surprises so v2 can address them.
+```
+
+### Prompt β — GTFS fetcher fix + fetch_all.sh (M10) — *runs in parallel with α*
+
+```
+Repo: /home/nls/Documents/dev/mitma-sedona
+Read PLAN.md §6 + §11 + scripts/fetch_*.sh before starting.
+
+The GTFS fetcher in scripts/fetch_gtfs.sh fails because transitfeeds.com
+URLs have moved. Goal: find the current open-data download URLs for
+Renfe Cercanías Barcelona (Rodalies) and Ferrocarrils de la Generalitat
+de Catalunya (FGC), update the fetcher, verify a download works.
+
+Steps:
+1. Probe candidate URLs:
+   - https://api.transitfeeds.com/v1/getLatestFeedVersion?key=...&feed=renfe/505 (needs API key)
+   - https://www.renfe.com/content/dam/renfe/es/General/Cercanias/horarios/cercanias_barcelona/google_transit.zip
+   - https://transitland.org/feeds/f-sp78~renfe-cercanias-barcelona (S3 link)
+   - https://www.fgc.cat/transit/google_transit.zip (or current FGC GTFS path)
+   - Mobility Database catalog: https://api.mobilitydatabase.org/v1/feeds (free)
+   For each, curl -sIL and report the HTTP code + Content-Type.
+
+2. Update scripts/fetch_gtfs.sh with the working URLs. Add a --check flag
+   (HEAD-only) like fetch_mitma.sh has.
+
+3. Run scripts/fetch_gtfs.sh and verify both feeds land with stops.txt
+   non-empty.
+
+4. Run a smoke test:
+   PYTHONPATH=src python -c "
+   from catmob.io_gtfs import load_combined
+   from pathlib import Path
+   bundle = load_combined(Path('data/bronze/gtfs/rodalies'),
+                          Path('data/bronze/gtfs/fgc'))
+   print(f'stops: {len(bundle[\"stops\"])}, freq: {len(bundle[\"freq\"])}')
+   print(bundle['freq'].sort_values('trips_to_bcn_core', ascending=False).head(10))
+   "
+
+5. Write scripts/fetch_all.sh — runs fetch_zoning.sh, fetch_mitma.sh,
+   fetch_osm.sh, fetch_air.sh, fetch_gtfs.sh in order; reports total
+   bronze size at the end. Idempotent (skips cached files).
+
+6. Commit + push (do not touch any other files; α may be running concurrently).
+
+If a candidate URL needs an API key, document it in NEXT_STEPS.md
+under "GTFS — needs Mobility Database API token" and ship the script
+with the env-var-driven version.
+```
+
+### Prompt γ — Notebook execution Makefile + jupytext sync hook (M11) — *parallel with α*
+
+```
+Repo: /home/nls/Documents/dev/mitma-sedona
+Read pyproject.toml + notebooks/*.py + .github/workflows/ci.yml.
+
+Goal: make running and re-rendering the 4 notebooks one-command, and
+make the .py ↔ .ipynb stay in sync automatically.
+
+Steps:
+1. Write a Makefile at repo root with targets:
+     make install        → pip install + jupytext config
+     make test           → PYTHONPATH=src pytest -q
+     make notebooks-dev  → execute all 4 notebooks at MITMA_SCOPE=dev
+     make notebooks-full → execute all 4 notebooks at MITMA_SCOPE=full
+     make sync           → jupytext --sync notebooks/*.py
+     make clean-rendered → rm notebooks/rendered/
+     make pages-preview  → python -m http.server -d docs 8000
+
+2. Write .pre-commit-config.yaml with the jupytext --sync hook
+   (https://jupytext.readthedocs.io/en/latest/using-pre-commit.html).
+   So an .ipynb edit and a .py edit can never drift.
+
+3. Add a new GitHub Actions job in .github/workflows/ci.yml:
+     name: notebook-smoke
+     runs-on: ubuntu-latest
+     steps: ... pip install + nbmake on TINY fixtures (the existing
+            tests/fixtures/ MITMA samples) — does NOT need the full bronze.
+   Notebook 01 needs to be made resilient: if data/bronze/mitma/daily/ is
+   empty, fall back to tests/fixtures/mitma_daily_sample.csv.gz so the
+   nbmake CI step succeeds on a fresh clone with no real data.
+
+4. Verify: `make test`, `make sync`, `make notebooks-dev` all pass on a
+   freshly-cloned repo (use a /tmp/clone test).
+
+5. Commit + push (do not touch src/catmob/ or notebooks/*.py beyond the
+   fixture-fallback in 01).
+```
+
+---
+
+### Prompt A — Setup & infra (M1) [historical, kept for reference]
 
 ```
 You are setting up a portfolio repo at /home/nls/Documents/dev/mitma-sedona.
