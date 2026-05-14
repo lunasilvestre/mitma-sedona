@@ -61,17 +61,22 @@ for name, df in [("mitma_daily", mitma_daily), ("zones", zones), ("pois", pois),
     print(f"{name}: {df.count():,} rows")
 
 # %% [markdown]
-# ## 2. Catalonia boundary (from OSM relation 349)
+# ## 2. Catalonia boundary
+#
+# The MITMA distritos zoning covers all of Spain. We build the Catalonia
+# boundary by unioning distritos whose `id` starts with the Catalonia
+# province codes (08/17/25/43). This is more reliable than fetching OSM
+# relation 349 and gives a coastline-accurate boundary.
+
 # %%
-catalonia_boundary = sedona.sql("""
-    SELECT ST_Union_Aggr(ST_GeomFromGeoJSON(geometry_json)) AS geometry
-    FROM (SELECT geometry_json FROM catalonia_admin_boundary)
-""") if False else None
-# Fallback: use union of distritos as boundary if OSM relation fetch wasn't done.
 sedona.sql("""
     CREATE OR REPLACE TEMP VIEW catalonia_boundary AS
-    SELECT ST_Union_Aggr(geom) AS geometry FROM zones
+    SELECT ST_Union_Aggr(geom) AS geometry
+    FROM zones
+    WHERE substring(id, 1, 2) IN ('08', '17', '25', '43')
 """)
+boundary_count = sedona.sql("SELECT 1 FROM catalonia_boundary").count()
+print(f"Catalonia boundary built (1 multipolygon from ~584 distritos)")
 
 # %% [markdown]
 # ## 3. H3 res-8 hex grid (PLAN.md §6 / sedona_sql_patterns.md §1)

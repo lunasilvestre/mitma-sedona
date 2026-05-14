@@ -1,6 +1,11 @@
-# mitma-sedona — Sedona/Spark + Valhalla + JupyterLab
+# mitma-sedona — Sedona/Spark + JupyterLab (+ optional Valhalla profile)
 #
-# Bring up:   docker compose -f docker/docker-compose.yml up -d
+# Bring up the core stack (jupyter only):
+#     docker compose -f docker/docker-compose.yml up -d
+#
+# Bring up jupyter + valhalla (bike isochrones):
+#     docker compose -f docker/docker-compose.yml --profile valhalla up -d
+#
 # Logs:       docker compose -f docker/docker-compose.yml logs -f jupyter
 # Tear down:  docker compose -f docker/docker-compose.yml down
 #
@@ -27,11 +32,12 @@ services:
       - JUPYTER_TOKEN=${JUPYTER_TOKEN:-mitma}
       - PYTHONPATH=/workspace/src
       - SPARK_LOCAL_DIRS=/tmp/spark
-      - SEDONA_VERSION=1.9.0
-      # Tune Spark for atlas (12 cores typical)
+      # Tune Spark for atlas (12+ cores typical)
       - SPARK_DRIVER_MEMORY=8g
       - SPARK_EXECUTOR_MEMORY=4g
       - SPARK_LOCAL_IP=0.0.0.0
+      # If valhalla profile is enabled, point client there.
+      - VALHALLA_URL=${VALHALLA_URL:-http://valhalla:8002}
     command: >
       bash -c "jupyter lab
         --ip=0.0.0.0 --port=8888 --no-browser --allow-root
@@ -39,12 +45,29 @@ services:
         --ServerApp.password=''
         --ServerApp.allow_origin='*'"
     restart: unless-stopped
-    depends_on:
-      valhalla:
-        condition: service_healthy
 
+  # Optional bike-isochrone backend. Enable with `--profile valhalla`.
+  #
+  # Heads-up: the gisops/valhalla images on Docker Hub were de-listed in
+  # 2025; the canonical replacement is at github.com/gis-ops/docker-valhalla
+  # but the GHCR image (`ghcr.io/gis-ops/docker-valhalla:latest`) currently
+  # requires authentication. Two practical workarounds:
+  #
+  # 1. Authenticate to GHCR:
+  #      gh auth token | docker login ghcr.io -u USERNAME --password-stdin
+  #    then `docker compose --profile valhalla up -d`.
+  #
+  # 2. Build Valhalla locally from source:
+  #      git clone https://github.com/valhalla/valhalla
+  #      cd valhalla && docker build -t local/valhalla:latest -f docker/Dockerfile .
+  #    then change the image: line below.
+  #
+  # The catmob.isochrones module reads VALHALLA_URL from env, so when this
+  # is unavailable, the M3 isochrone step is skipped and PLAN.md §13
+  # documents the fallback (precomputed circular buffers around stations).
   valhalla:
-    image: gisops/valhalla:latest
+    profiles: ["valhalla"]
+    image: ghcr.io/gis-ops/docker-valhalla:latest
     container_name: mitma-sedona-valhalla
     ports:
       - "8002:8002"
@@ -65,5 +88,3 @@ services:
       retries: 10
       start_period: 5m
     restart: unless-stopped
-
-# No top-level network; both services share the default compose bridge.
