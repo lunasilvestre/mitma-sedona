@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  story.template.html — shell for the generic scrollytelling geo-engine.
+
+  scripts/build_story.py reads site/content/chapters.json and fills these
+  placeholders (verbatim string replace), writing the result to docs/story.html:
+
+    __TITLE__            -> the story title (also used in <title> and hero)
+    __PANELS__           -> the rendered chapter <section.story-panel> cards
+                            (hero, chapter breaks, code embeds) as HTML
+    __CHAPTERS_JSON__    -> the chapters.json object, inlined as a JS literal
+                            assigned to window.STORY_CONFIG (the engine reads
+                            this; it is the ONLY engine<->content contract)
+    __MANIFEST__         -> the story_data/manifest.json object inlined as a JS
+                            literal assigned to window.STORY_MANIFEST (headline
+                            metrics; optional, may be "{}")
+    __GH_REPO__          -> "owner/name" for permalink construction (codeblock.js)
+
+  CDN libraries are PINNED. No build step, no npm. Keyless + GitHub-Pages safe.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>__TITLE__</title>
+
+  <!-- Pinned CDN libraries (keyless, no build) -->
+  <!-- deck.gl 9.3.2 -->
+  <script src="https://unpkg.com/deck.gl@9.3.2/dist.min.js"></script>
+  <!-- MapLibre GL 4.7.1 -->
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <!-- h3-js 4.1.0 (deck.gl H3HexagonLayer reads window.h3) -->
+  <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+  <!-- highlight.js (code embeds) -->
+  <link rel="stylesheet" href="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css" />
+  <script src="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+
+  <!-- Engine assets (generic, repo-local) -->
+  <link rel="stylesheet" href="../site/engine/story.css" />
+  <link rel="preconnect" href="https://server.arcgisonline.com" />
+</head>
+<body>
+  <div class="story-root">
+
+    <!-- Sticky map slot: the single MapLibre + deck.gl instance lives here -->
+    <div class="story-map-slot">
+      <div id="map" class="map-host mode-single">
+        <div id="map-reveal-handle"></div>
+      </div>
+      <div id="story-legend"></div>
+    </div>
+
+    <!-- The scrolling flow of chapter panels (build_story.py fills this) -->
+    <main class="story-flow">
+      __PANELS__
+    </main>
+
+  </div>
+
+  <!-- Inline config: the engine<->content contract -->
+  <script>
+    window.STORY_CONFIG = __CHAPTERS_JSON__;
+    window.STORY_MANIFEST = __MANIFEST__;
+    window.STORY_GH_REPO = "__GH_REPO__";
+  </script>
+
+  <!-- Engine modules -->
+  <script src="../site/engine/scrolly.js"></script>
+  <script src="../site/engine/story-map.js"></script>
+  <script src="../site/engine/codeblock.js"></script>
+
+  <!-- Boot -->
+  <script>
+    (function () {
+      // 1. The map renderer binds to the CustomEvent seam.
+      var sm = new StoryMap({ container: 'map', config: window.STORY_CONFIG });
+      sm.init();
+      window.__storyMap = sm;
+
+      // 2. The scroll controller drives the seam.
+      Scrolly.auto();
+
+      // 3. Code embeds: highlight + "view on GitHub" permalinks.
+      CodeBlocks.auto();
+    })();
+  </script>
+</body>
+</html>

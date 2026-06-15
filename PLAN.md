@@ -31,6 +31,10 @@ Docker compose builds have failed four times (PEP 668 numpy uninstall, GHCR auth
 
 Valhalla bike isochrones are a *quality* improvement on the train-reach feature. The fallback — a 5 km Euclidean buffer around each train station, weighted by service frequency — is 80% as informative for 5% of the work. Ship the prototype with circular buffers; document Valhalla as "v2 — replace bike-reach feature with real road-network isochrones." This is a portfolio piece, not a contract; clarity about the simplification beats a missing demo.
 
+### v2 revision plan → [`docs/v2_revision.md`](docs/v2_revision.md)
+
+The dev-scope prototype populates **12 of 24** gold feature columns with real signal (9 real, 3 shortcut: circular-buffer `train_reach_min` and constant-12 GTFS); the other 12 are NULL — schema slot and active scoring weight exist, but notebook 02 never fills them. The scoring index is therefore structurally complete but empirically thin (each NULL is `weight × 0`). [`docs/v2_revision.md`](docs/v2_revision.md) is the full plan to turn every NULL/shortcut into a source-backed column with no scoring refactor: a per-feature summary table, sections grouped by Mobility/Valhalla, environmental health (air + thermal), nature & biodiversity, amenities & health, and pollution & light — each item wired to its `io_*` module, notebook step, gold column, weight key, and the matching `docs/sedona_sql_patterns.md` idiom. It ends with a value÷effort roadmap (Wave 1 quick wins: OSM green/sea/pharmacy distances, GBIF biodiversity, GTFS frequency, E-PRTR; Wave 2 STAC rasters: TCD, WDPA, air, VIIRS, Landsat LST → UHI; Wave 3: the Valhalla isochrone service) and a dependencies/risks section (EPSG:25831 reprojection first, Valhalla tile build, Planetary Computer STAC, GTFS feed availability, manual-download EEA/WDPA/E-PRTR, the Spark 4.1 × Sedona 1.9 classloader/index constraints).
+
 ---
 
 ---

@@ -17,9 +17,14 @@
   .card:hover { border-color: rgba(120, 200, 255, 0.5); transform: translateY(-1px); }
   .card h2 { font-size: 14px; margin: 0 0 4px; color: #88d4ff; letter-spacing: 0.02em; }
   .card p  { font-size: 13px; margin: 0; color: #a0a8c0; line-height: 1.5; }
+  .card.hero { background: linear-gradient(135deg, rgba(40, 60, 95, 0.55), rgba(20, 25, 40, 0.6));
+               border-color: rgba(120, 200, 255, 0.35); padding: 22px 24px; }
+  .card.hero h2 { font-size: 17px; }
+  .card.hero p  { font-size: 14px; color: #c4cce0; }
   .badges { margin: 24px 0 0; }
   .badge { display: inline-block; padding: 3px 8px; margin: 0 4px 4px 0; border-radius: 4px;
            font-size: 11px; background: rgba(120, 200, 255, 0.18); color: #88d4ff; }
+  .section { margin-top: 36px; font-size: 12px; color: #708090; text-transform: uppercase; letter-spacing: 0.06em; }
   footer { margin: 48px 0 0; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06);
            font-size: 12px; color: #708090; }
   footer a { color: #a0a8c0; }
@@ -37,15 +42,21 @@
 
   <div class="badges">
     <span class="badge">Apache Sedona 1.9</span>
-    <span class="badge">Spark 3.5</span>
+    <span class="badge">Spark 4.1</span>
     <span class="badge">H3 res 8</span>
     <span class="badge">Lonboard · pydeck · deck.gl</span>
     <span class="badge">MITMA v2 + OSM + EEA + Landsat</span>
   </div>
 
-  <h2 style="margin-top: 36px; font-size: 12px; color: #708090; text-transform: uppercase; letter-spacing: 0.06em;">
-    Live demos
-  </h2>
+  <a href="explore.html" class="card hero">
+    <h2>Explore the geo-browser →</h2>
+    <p>A dark, satellite-backed map of the liveability index: 45,220 H3 res-8 hexes
+       over Esri imagery, with a preset selector, an analytic-metric recolour, a 2.5D
+       extrude toggle, and MITMA OD arcs + OSM amenity inputs. Dev-scope prototype —
+       sparse coverage in places; liveability is a relative index, not a guarantee.</p>
+  </a>
+
+  <h2 class="section">Demos</h2>
 
   <a href="preview_deck.html" class="card">
     <h2>Preliminary preview (synthetic data) →</h2>
@@ -55,26 +66,65 @@
   </a>
 
   <a href="catalonia_liveability.html" class="card">
-    <h2>Production demo (real data, when notebook 03 has run) →</h2>
+    <h2>Production demo (real data) →</h2>
     <p>Same layers, generated from the gold parquet by <code>catmob.viz.export_deck_html</code>.
-       This page is published whenever the M3 pipeline produces a fresh
-       <code>data/gold/h3_res8_catalonia.parquet</code>.</p>
+       Self-contained deck.gl page (3.5 MB), opens in any browser.</p>
   </a>
 
-  <h2 style="margin-top: 36px; font-size: 12px; color: #708090; text-transform: uppercase; letter-spacing: 0.06em;">
-    Repo &amp; docs
-  </h2>
+  <h2 class="section">Docs</h2>
 
-  <a href="https://github.com/lunasilvestre/mitma-sedona" class="card">
-    <h2>github.com/lunasilvestre/mitma-sedona →</h2>
-    <p>Full source, Plan, Sedona SQL patterns, schemas, tests, notebooks.</p>
+  <a href="quickstart.md" class="card">
+    <h2>quickstart.md →</h2>
+    <p>Run it in 5 min (tests + preview) or 10 min (full Docker stack).</p>
+  </a>
+
+  <a href="architecture.md" class="card">
+    <h2>architecture.md →</h2>
+    <p>Repo layout + Bronze→Silver→Gold lakehouse + Sedona SQL idioms.</p>
+  </a>
+
+  <a href="scoring.md" class="card">
+    <h2>scoring.md →</h2>
+    <p>The liveability score: 6 dimensions, weights, and the four presets.</p>
+  </a>
+
+  <a href="data_sources.md" class="card">
+    <h2>data_sources.md →</h2>
+    <p>Every upstream source + licence + the default data window.</p>
+  </a>
+
+  <a href="visualization.md" class="card">
+    <h2>visualization.md →</h2>
+    <p>The deck.gl / Lonboard stack and the story-map geo-browser.</p>
+  </a>
+
+  <a href="results.md" class="card">
+    <h2>results.md →</h2>
+    <p>Prototype artifacts, Top-10, score distribution, and the retrospective.</p>
   </a>
 
   <a href="sedona_sql_patterns.md" class="card">
-    <h2>docs/sedona_sql_patterns.md →</h2>
+    <h2>sedona_sql_patterns.md →</h2>
     <p>8 advanced SQL patterns adapted from Wherobots and Apache Sedona examples
        (H3 cell-id explode, dasymetric disaggregation, RS_ZonalStats, ST_KNN,
        BROADCAST hints, GeoArrow zero-copy, MAX_BY peak-hour, ST_DBSCAN).</p>
+  </a>
+
+  <a href="local_env_setup.md" class="card">
+    <h2>local_env_setup.md →</h2>
+    <p>Miniforge + conda recipe for the local development environment.</p>
+  </a>
+
+  <h2 class="section">Repo</h2>
+
+  <a href="https://github.com/lunasilvestre/mitma-sedona" class="card">
+    <h2>github.com/lunasilvestre/mitma-sedona →</h2>
+    <p>Full source, schemas, tests, notebooks, and the Docker stack.</p>
+  </a>
+
+  <a href="../PLAN.md" class="card">
+    <h2>PLAN.md →</h2>
+    <p>Canonical planning doc + full milestone breakdown and constraint table.</p>
   </a>
 
   <footer>

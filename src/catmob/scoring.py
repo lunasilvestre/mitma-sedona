@@ -35,6 +35,7 @@ def load_weights(preset: str = "default", path: Path | str | None = None) -> dic
     return base
 
 
+# story:scoring:score_hex
 def score_hex(row: Mapping[str, float], weights: Mapping[str, float]) -> float:
     """Compute a single hex's liveability score from its features.
 
@@ -97,6 +98,7 @@ def score_hex(row: Mapping[str, float], weights: Mapping[str, float]) -> float:
         s += float(row["mitma_through_ratio"]) * w.get("mitma_through_ratio", 0)
 
     return float(max(0.0, min(100.0, s)))
+# story:end
 
 
 def score_dataframe(

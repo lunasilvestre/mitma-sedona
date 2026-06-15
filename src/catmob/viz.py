@@ -172,6 +172,7 @@ def _render_template(payload: dict) -> str:
 
 
 # Re-bind export to use the cleaner renderer.
+# story:viz:export_deck_html
 def export_deck_html(  # noqa: F811
     out_path: Path | str,
     hexes: pd.DataFrame,
@@ -199,6 +200,7 @@ def export_deck_html(  # noqa: F811
     }
     out_path.write_text(_render_template(payload), encoding="utf-8")
     return out_path
+# story:end
 
 
 # ---------------------------------------------------------------------------

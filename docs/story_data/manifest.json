@@ -1,0 +1,75 @@
+{
+  "n_hexes": 45220,
+  "coverage": {
+    "h3_id": 1.0,
+    "lon_centroid": 1.0,
+    "lat_centroid": 1.0,
+    "train_reach_min": 0.2227,
+    "climb_min_m": 0.3687,
+    "yoga_min_m": 0.1041,
+    "hospital_min_m": 0.1014,
+    "mitma_inflow_daily": 1.0,
+    "mitma_outflow_daily": 1.0,
+    "mitma_through_ratio": 1.0,
+    "motorway_within_500m": 1.0,
+    "industry_density_per_km2": 1.0
+  },
+  "score_stats": {
+    "default": {
+      "min": 0.0,
+      "25%": 28.89,
+      "50%": 50.0,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 40.67,
+      "std": 14.22
+    },
+    "nature_first": {
+      "min": 0.0,
+      "25%": 38.0,
+      "50%": 50.0,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 45.14,
+      "std": 9.08
+    },
+    "quiet_strict": {
+      "min": 0.0,
+      "25%": 25.75,
+      "50%": 49.5,
+      "75%": 49.5,
+      "max": 63.52,
+      "mean": 39.17,
+      "std": 15.42
+    },
+    "amenity_first": {
+      "min": 0.0,
+      "25%": 7.01,
+      "50%": 50.0,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 33.27,
+      "std": 22.19
+    }
+  },
+  "presets": [
+    "default",
+    "nature_first",
+    "quiet_strict",
+    "amenity_first"
+  ],
+  "arc_count": 5000,
+  "poi_categories": {
+    "climbing": 219,
+    "yoga": 67,
+    "hospital": 36
+  },
+  "source_initial_view": {
+    "longitude": 1.7,
+    "latitude": 41.6,
+    "zoom": 8.0,
+    "pitch": 45.0,
+    "bearing": 0
+  },
+  "source_basemap": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+}

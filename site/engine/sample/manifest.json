@@ -1,0 +1,12 @@
+{
+  "n_hexes": 12,
+  "note": "SAMPLE manifest — headline metrics per column. Real build emits 45,220 rows.",
+  "metrics": {
+    "mitma_inflow_daily": { "min": 2100, "max": 31200, "mean": 13725, "median": 12250, "coverage": 1.0 },
+    "train_reach_min": { "min": 3, "max": 15, "mean": 8.5, "median": 8, "coverage": 0.67 },
+    "mitma_through_ratio": { "min": 0.33, "max": 0.78, "mean": 0.535, "median": 0.50, "coverage": 1.0 },
+    "industry_density_per_km2": { "min": 0.8, "max": 41.2, "mean": 12.3, "median": 7.0, "coverage": 1.0 },
+    "score_default": { "min": 28, "max": 64, "mean": 47.9, "median": 48, "coverage": 1.0 },
+    "score_nature_first": { "min": 22, "max": 60, "mean": 45.4, "median": 48.5, "coverage": 1.0 }
+  }
+}
