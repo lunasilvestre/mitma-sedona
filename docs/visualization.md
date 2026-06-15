@@ -50,9 +50,9 @@ from GitHub Pages.
   with no backend. Exercises `H3HexagonLayer` (extruded score), `ArcLayer`
   (MITMA OD from BCN), `ScatterplotLayer` (climbing & yoga POIs), with layer
   toggles, sliders, and hover tooltips.
-- **[catalonia_liveability.html](catalonia_liveability.html)** — the production
-  version, built by notebook 03 from the gold parquet via
-  `catmob.viz.export_deck_html`. Self-contained (3.5 MB), opens in any browser.
+- **[catalonia_liveability.html](catalonia_liveability.html)** — the earlier
+  self-contained deck.gl page built from the gold parquet, kept for reference.
+  Superseded by [explore.html](explore.html).
 
 ---
 

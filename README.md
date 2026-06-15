@@ -13,9 +13,10 @@ A multi-criteria liveability index over Catalonia, computed at H3 res-8
 It is also a portfolio piece: a real personal question, answered with real data
 engineering.
 
-**→ [Explore the interactive story map](docs/story.html)** — a dark,
-satellite-backed scrollytelling geo-browser that walks through the pipeline's
-inputs → steps → outputs. *(Dev-scope prototype: sparse coverage in places, and
+**→ [Explore the geo-browser](docs/explore.html)** — a dark,
+satellite-backed interactive map of the liveability index, with a preset
+selector, an analytic-metric recolour, a 2.5D extrude toggle, and MITMA OD arcs
++ OSM amenity inputs. *(Dev-scope prototype: sparse coverage in places, and
 the liveability score is a relative index, not a guarantee.)*
 
 ## Docs
@@ -26,9 +27,9 @@ the liveability score is a relative index, not a guarantee.)*
 | [docs/architecture.md](docs/architecture.md) | Repo layout + Bronze→Silver→Gold lakehouse + Sedona SQL idioms |
 | [docs/scoring.md](docs/scoring.md) | The liveability score: 6 dimensions, weights, and presets |
 | [docs/data_sources.md](docs/data_sources.md) | Every source + licence + the default data window |
-| [docs/visualization.md](docs/visualization.md) | The deck.gl/Lonboard stack and the story-map geo-browser |
+| [docs/visualization.md](docs/visualization.md) | The deck.gl/Lonboard stack and the explore.html geo-browser |
 | [docs/results.md](docs/results.md) | Prototype artifacts, Top-10, distribution + the retrospective |
-| **[docs/story.html](docs/story.html)** | **The interactive story map** (scrollytelling geo-browser) |
+| **[docs/explore.html](docs/explore.html)** | **The interactive geo-browser** (liveability index on a satellite-backed map) |
 | [PLAN.md](PLAN.md) | Canonical planning doc + full milestone breakdown |
 | [NOTES_FROM_PROTOTYPE_RUN.md](NOTES_FROM_PROTOTYPE_RUN.md) | "What tripped us / how we fixed it" log |
 

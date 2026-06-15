@@ -1,8 +1,0 @@
-[
-  { "lon": 2.169, "lat": 41.391, "domain": "hospital", "name": "Hospital sample" },
-  { "lon": 2.176, "lat": 41.393, "domain": "pharmacy", "name": "Farmacia sample" },
-  { "lon": 2.182, "lat": 41.387, "domain": "climb", "name": "Climbing gym sample" },
-  { "lon": 2.158, "lat": 41.395, "domain": "yoga", "name": "Yoga studio sample" },
-  { "lon": 2.194, "lat": 41.383, "domain": "industry", "name": "Industrial estate sample" },
-  { "lon": 2.146, "lat": 41.399, "domain": "wellness", "name": "Wellness sample" }
-]
