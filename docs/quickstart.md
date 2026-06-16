@@ -35,6 +35,20 @@ docker compose -f docker/docker-compose.yml up -d
 # → Valhalla on   http://localhost:8002
 ```
 
+The v2.3 gold layer is built by `scripts/run_gold_v2.py` (EPSG:25831 reprojection
+fix + the full feature enrichment — GTFS frequency, tree cover, Natura 2000,
+biodiversity, air quality, LST/UHI, VIIRS, E-PRTR). It runs on plain
+pandas + geopandas + h3, writing `data/gold/h3_res8_catalonia_v2.parquet`
+(45,220 hexes × 26 columns) from the bronze layer:
+
+```bash
+python scripts/run_gold_v2.py
+# → data/gold/h3_res8_catalonia_v2.parquet  (45,220 hexes, every dimension wired)
+```
+
+This run uses the **7-day dev window (2024-03-04..10)** — a deliberate dev-scope
+slice, not the full year.
+
 ## Tests
 
 ```bash

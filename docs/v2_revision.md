@@ -1,7 +1,15 @@
 # v2 Revision Plan — From Dev-Scope Prototype to a Complete Liveability Index
 
-**Status:** Plan · **Date:** 2026-06-15 · **Author:** Nelson + Claude
+**Status:** ✅ LARGELY EXECUTED — shipped as v2.3, live · **Date:** 2026-06-15 (plan) → 2026-06-16 (shipped) · **Author:** Nelson + Claude
 **Scope:** path from the v1 dev-scope prototype (12 of 24 feature columns real, buffer-based mobility) to a fully populated, defensible Catalonia liveability index.
+
+> ## Execution status (read first)
+> This was the roadmap; **most of it is now DONE** and live at [explore.html](https://lunasilvestre.github.io/mitma-sedona/explore.html). The shipped v2.3 gold layer (`scripts/run_gold_v2.py` → `data/gold/h3_res8_catalonia_v2.parquet`, 45,220 hexes; coverage in `docs/story_data/manifest.json`) carries **all 24 feature dimensions on real data**:
+> - **DONE — scoring correctness:** the v1 amenity *distance-penalty* flaw (absence out-scored far-presence) is fixed — `climb`/`yoga`/`green`/`hospital` are now **saturating positive closeness rewards** (`scoring.py:closeness_reward`, 10 km catchment, weight keys `climb_reward`/`yoga_reward`/`green_reward`/`hospital_reward` in `configs/weights.yaml`). Penalties stay negative (motorway, industry, eprtr, no2/pm25/uhi/viirs). All distances are computed in **EPSG:25831 metres** (the §5 reprojection fix landed) — the v1 degree-buffer anisotropy is gone.
+> - **DONE — features wired (coverage from manifest):** `green_min_m` (100%), `tree_cover_pct` (100%), `natura2000_within_5km` (100%, 231 sites), `biodiversity_obs_density` (100%), `pharmacy_density_per_km2` (100%), `eprtr_facility_min_m` (98%, 107 facilities), `no2_ugm3` (~41%) + `pm25_ugm3` (~20%) from XVPCA stations, `lst_summer_median_c`+`uhi_delta_c` (100%), `viirs_radiance` (100%), real GTFS `trains_per_day_nearest` (91 distinct values — no longer the constant 12) + `trains_to_bcn_nearest` (72 distinct), `sea_min_m` (coastal strip). The scoring function needed **no change** — only data, exactly as §6 predicted.
+> - **ONLY REMAINING — Wave 3:** `train_reach_min` via **Valhalla bike isochrones** (§3.1, §5) is still the metric circular-buffer fallback; the `VALHALLA_URL`-gated isochrone upgrade is the one deferred item, off the critical path. Optional layered extras also still open: EEA/CAMS air gap-fill on top of XVPCA-only NO₂/PM₂.₅.
+>
+> Everything below is the original plan text, kept intact for the reasoning and per-feature wiring detail; treat **L-effort Valhalla** as the only "pending" row in the §4 roadmap and §2 table.
 
 > Cross-references: [`PLAN.md`](../PLAN.md) §2 (scoring table) and §15 (prototype scope), [`docs/sedona_sql_patterns.md`](sedona_sql_patterns.md) (canonical SQL idioms), [`NOTES_FROM_PROTOTYPE_RUN.md`](../NOTES_FROM_PROTOTYPE_RUN.md) (the constraints discovered while executing M6→M8), [`src/catmob/schemas.py`](../src/catmob/schemas.py) `GOLD_HEX_SCHEMA` (column contracts), and [`configs/weights.yaml`](../configs/weights.yaml) (active scoring weight keys, 4 presets).
 
@@ -185,7 +193,7 @@ Each item below lists: data source + access, pipeline wiring (`io_*` module → 
 
 Ordering by **value ÷ effort**, quick wins first. Every quick win reuses an `sjoin_nearest` / buffer-count / GROUP BY shape already proven in notebook 02 (NOTES §16) — minimal new code, big completeness gain.
 
-### Wave 1 — quick wins (all effort **S**, no external service, mostly already-fetched data)
+### Wave 1 — quick wins (all effort **S**, no external service, mostly already-fetched data) — ✅ DONE (shipped in v2.3)
 
 1. **`green_min_m`** (OSM parks → sjoin_nearest). Parks already in bronze; 5–10% score variance for ~one cell of code. Highest value/effort.
 2. **`sea_min_m`** (OSM coastline → sjoin_nearest). Unlocks the nature_first coastal bonus; coastline already in `network.parquet`.
@@ -195,7 +203,7 @@ Ordering by **value ÷ effort**, quick wins first. Every quick win reuses an `sj
 6. **`hospital_min_m` coverage merge** (OSM ∪ CatSalut). Already real; cheap completeness upgrade.
 7. **`eprtr_facility_min_m`** (E-PRTR sjoin_nearest). One manual CSV download, then a broadcast join; parser ready.
 
-### Wave 2 — medium lifts (STAC rasters + vector downloads, effort **M**)
+### Wave 2 — medium lifts (STAC rasters + vector downloads, effort **M**) — ✅ DONE (shipped in v2.3; EEA/CAMS air gap-fill on top of XVPCA-only remains optional)
 
 8. **`tree_cover_pct`** (Copernicus TCD `RS_ZonalStats`). Standalone *and* a prerequisite for UHI — do it before thermal.
 9. **`natura2000_within_5km`** (WDPA buffer-intersect). Manual download + a buffer join; big preset impact.
@@ -205,7 +213,7 @@ Ordering by **value ÷ effort**, quick wins first. Every quick win reuses an `sj
 13. **`lst_summer_median_c`** (Landsat JJA composite `RS_ZonalStats`). Functions exist, just need wiring; depends on Sedona STAC reader / `stackstac`.
 14. **`uhi_delta_c`** (rural-baseline subtraction). Strictly after `lst_summer_median_c` **and** `tree_cover_pct` — pure SQL once both inputs land.
 
-### Wave 3 — the big lift (effort **L**, external service)
+### Wave 3 — the big lift (effort **L**, external service) — ⬜ REMAINING (the only deferred item; `VALHALLA_URL`-gated, fallback already ships)
 
 15. **`train_reach_min` via Valhalla bike isochrones.** Replaces the circular-buffer shortcut. Gated on a stable Valhalla container + tile build (§5). The fallback already ships, so this is a *quality* upgrade, not a blocker — slot it last and let `VALHALLA_URL` gate it.
 

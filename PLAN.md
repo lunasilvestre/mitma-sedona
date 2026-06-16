@@ -1,6 +1,7 @@
 # mitma-sedona — Catalonia Liveability × Mobility Planning Doc
 
-**Status:** Draft v1.3 (breakthrough → working prototype) · **Date:** 2026-05-14 · **Author:** Nelson + Claude (atlas + Cowork)
+**Status:** v2.3 (corrected + enriched index — SHIPPED LIVE) · **Date:** 2026-06-16 · **Author:** Nelson + Claude (atlas + Cowork)
+> **Live:** [`explore.html`](https://lunasilvestre.github.io/mitma-sedona/explore.html) — a real Catalonia liveability index over 45,220 H3 res-8 hexes, all 24 feature dimensions real-data-wired, amenity terms as saturating closeness rewards, distances in EPSG:25831 metres. This plan is kept as the project's running narrative; the milestone table (§10) and §15 carry the up-to-date status. Earlier sections are historical design notes — they are not all rewritten to v2.3 phrasing, but the milestones are the source of truth for what shipped.
 
 > **The real question** — *Where in Catalonia could I live well? Within bike-reach of a train station that connects to Barcelona, with climbing gyms and yoga nearby, close to green or sea, away from heavy industry and motorway noise — and now also: clean air, low urban heat, low light pollution, near biodiversity, with health amenities at hand.*
 
@@ -11,6 +12,8 @@ Started as "regional mobility analysis with Sedona". Reframed as a personal live
 ---
 
 ## 15. Breakthrough — what's actually missing for a working prototype
+
+> **Status (2026-06-16): DONE, and superseded by v2.3.** The working prototype shipped (M6+M7+M8), and the v2 enrichment in [`docs/v2_revision.md`](docs/v2_revision.md) / [`docs/v2_build_playbook.md`](docs/v2_build_playbook.md) is now **executed and live** at [explore.html](https://lunasilvestre.github.io/mitma-sedona/explore.html). The narrative below is the original breakthrough analysis, kept for the record; where it talks about "circular-buffer fallbacks" and "12 of 24 columns", read it as the v1 starting point — v2.3 fixed the scoring (saturating closeness rewards, EPSG:25831 metres) and wired all 24 dimensions to real data. Only Valhalla bike isochrones (M14) remain optional.
 
 We're closer than the open-issues list makes it look. The repo already has:
 the data on disk (1.4 GB MITMA + 251 MB OSM PBF + 25 MB MITMA zoning incl. 60 MB GeoJSON), every parser implementation, every schema, the scoring function, the deck.gl HTML exporter, and 44 green tests. The **only** thing missing for "I can show this to a recruiter and click around real Catalonia data" is **a Spark+Sedona runtime that can execute notebook 01 once**.
@@ -35,7 +38,9 @@ Valhalla bike isochrones are a *quality* improvement on the train-reach feature.
 
 > **Turn-key execution HOW** → [`docs/v2_build_playbook.md`](docs/v2_build_playbook.md): per-feature acquisition command, exact code change, gold column + weight key, validation check, on-disk/fetch/gated tag, the data-readiness matrix, and the recommended sequential build order (do the EPSG:25831 fix first).
 
-The dev-scope prototype populates **12 of 24** gold feature columns with real signal (9 real, 3 shortcut: circular-buffer `train_reach_min` and constant-12 GTFS); the other 12 are NULL — schema slot and active scoring weight exist, but notebook 02 never fills them. The scoring index is therefore structurally complete but empirically thin (each NULL is `weight × 0`). [`docs/v2_revision.md`](docs/v2_revision.md) is the full plan to turn every NULL/shortcut into a source-backed column with no scoring refactor: a per-feature summary table, sections grouped by Mobility/Valhalla, environmental health (air + thermal), nature & biodiversity, amenities & health, and pollution & light — each item wired to its `io_*` module, notebook step, gold column, weight key, and the matching `docs/sedona_sql_patterns.md` idiom. It ends with a value÷effort roadmap (Wave 1 quick wins: OSM green/sea/pharmacy distances, GBIF biodiversity, GTFS frequency, E-PRTR; Wave 2 STAC rasters: TCD, WDPA, air, VIIRS, Landsat LST → UHI; Wave 3: the Valhalla isochrone service) and a dependencies/risks section (EPSG:25831 reprojection first, Valhalla tile build, Planetary Computer STAC, GTFS feed availability, manual-download EEA/WDPA/E-PRTR, the Spark 4.1 × Sedona 1.9 classloader/index constraints).
+> **UPDATE (v2.3, shipped live):** the "12 of 24 columns / structurally complete but empirically thin" framing below is now **historical** — it describes the v1 dev-scope prototype. The [`docs/v2_revision.md`](docs/v2_revision.md) plan has since been **executed**: all 24 feature dimensions are real-data-wired, the amenity terms are saturating closeness rewards (the v1 flaw where "no amenity" out-scored "amenity but far" is fixed), and every distance is computed in EPSG:25831 metres (the v1 degree-buffer anisotropy is fixed). Only the Valhalla bike isochrones (M14) remain optional/deferred. See `scripts/run_gold_v2.py` + `docs/story_data/manifest.json` for the live coverage.
+
+The v1 dev-scope prototype populated **12 of 24** gold feature columns with real signal (9 real, 3 shortcut: circular-buffer `train_reach_min` and constant-12 GTFS); the other 12 were NULL — schema slot and active scoring weight existed, but notebook 02 never filled them, so the scoring index was structurally complete but empirically thin (each NULL was `weight × 0`). [`docs/v2_revision.md`](docs/v2_revision.md) was the plan — now largely executed — to turn every NULL/shortcut into a source-backed column with no scoring refactor: a per-feature summary table, sections grouped by Mobility/Valhalla, environmental health (air + thermal), nature & biodiversity, amenities & health, and pollution & light — each item wired to its `io_*` module, notebook step, gold column, weight key, and the matching `docs/sedona_sql_patterns.md` idiom. It ends with a value÷effort roadmap (Wave 1 quick wins: OSM green/sea/pharmacy distances, GBIF biodiversity, GTFS frequency, E-PRTR; Wave 2 STAC rasters: TCD, WDPA, air, VIIRS, Landsat LST → UHI; Wave 3: the Valhalla isochrone service) and a dependencies/risks section (EPSG:25831 reprojection first, Valhalla tile build, Planetary Computer STAC, GTFS feed availability, manual-download EEA/WDPA/E-PRTR, the Spark 4.1 × Sedona 1.9 classloader/index constraints).
 
 ---
 
@@ -356,7 +361,7 @@ Per `notebooks/preview_storyboard.md` (full table); summary:
 
 ---
 
-## 10. Milestones (revised v1.3)
+## 10. Milestones (revised v2.3 — corrected + enriched index shipped live)
 
 | # | Milestone | Status |
 |---|---|---|
@@ -366,16 +371,17 @@ Per `notebooks/preview_storyboard.md` (full table); summary:
 | **M3** | h3_utils + scoring + isochrones + viz library code | ✅ shipped |
 | **M4** | 4 jupytext notebooks (01-04) | ✅ shipped (not yet executed on real data) |
 | **M5** | Push to GitHub + Pages auto-deploy | ✅ shipped |
-| **M6** | **Spark stack on atlas — first real Sedona run on dev-scope MITMA** | next — Prompt α |
-| **M7** | **Real gold parquet (~50k hexes) from dev-scope** | Prompt α (continues) |
-| **M8** | **Real visualisations + screenshots** (`docs/catalonia_liveability.html` + `docs/screenshots/*.png`) | Prompt α (continues) |
-| **M9** | **README polish with embedded screenshots + commit + push** | Cowork (after α) |
+| **M6** | **Spark stack on atlas — first real Sedona run on dev-scope MITMA** | ✅ shipped (commit `3e5e424`) |
+| **M7** | **Real gold parquet (45,220 hexes) from dev-scope** | ✅ shipped — `data/gold/h3_res8_catalonia_v2.parquet` |
+| **M8** | **Real visualisations + geo-browser** (`docs/explore.html` + `docs/catalonia_liveability.html`) | ✅ shipped |
+| **M9** | **README polish with embedded screenshots + commit + push** | ✅ shipped |
 | M10 | GTFS fetcher fix + scripts/fetch_all.sh orchestrator | Prompt β (parallel) |
 | M11 | Notebook execution Makefile + jupytext sync hook + nbmake CI | Prompt γ (parallel) |
 | M12 | Docker container for outside reproducibility | deferred (v1.1) |
-| M13 | Valhalla bike isochrones (replaces circular-buffer fallback) | deferred (v2) |
-| M14 | Full-scale run (Q1+Q2 2024 daily + all March hourly) | deferred (after dev-scope works) |
-| M15 | OB1 / Wiki capture, decision log, blog post | Cowork (later) |
+| **M13** | **v2.3 corrected + enriched index — SHIPPED LIVE** (saturating closeness rewards replace the v1 amenity distance-penalty flaw; all distances in EPSG:25831 metres; all 24 feature dimensions real-data-wired) | ✅ shipped — live at [explore.html](https://lunasilvestre.github.io/mitma-sedona/explore.html) |
+| M14 | Valhalla bike isochrones (refines the train-reach term over the metric circular buffer) | deferred (only remaining v2 item; `VALHALLA_URL`-gated, off critical path) |
+| M15 | Full-scale run (Q1+Q2 2024 daily + all March hourly) | deferred (after dev-scope works) |
+| M16 | OB1 / Wiki capture, decision log, blog post | Cowork (later) |
 
 ---
 

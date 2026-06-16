@@ -37,18 +37,21 @@
     <h1>Catalonia liveability</h1>
     <p class="subtitle">mitma-sedona · geo-browser</p>
 
-    <p class="lead">Where could you live <strong>well</strong> in Catalonia — within
-      bike-reach of a train, a climbing gym or yoga nearby, a hospital in reach, and
-      away from heavy industry and motorway noise? This map carries an
-      <strong>H3 res-8</strong> multi-criteria <strong>liveability index</strong> over
-      45,220 hexagons, built as an applied spatial-data-science pipeline on
-      <strong>Apache Sedona</strong> from MITMA mobility, OpenStreetMap amenities and
-      environmental layers. Every number is reproducible from the
+    <p class="lead">Where could you live <strong>well</strong> in Catalonia — near a
+      frequent train, a climbing gym or yoga nearby, a hospital in reach, green and
+      coast close, clean air, and away from heavy industry and motorway noise? This map
+      carries an <strong>H3 res-8</strong> multi-criteria <strong>liveability index</strong>
+      over 45,220 hexagons, built as an applied spatial-data-science pipeline on
+      <strong>Apache Sedona</strong>. Every dimension is wired to real data — MITMA
+      mobility, Renfe Rodalies + FGC GTFS, OpenStreetMap amenities, EEA tree cover,
+      Natura 2000, XVPCA air quality, Landsat heat and VIIRS night-light — and every
+      number is reproducible from the
       <a href="https://github.com/lunasilvestre/mitma-sedona">repository</a>.</p>
 
     <p class="scope-banner">The liveability score is a <strong>relative index</strong> —
       a starting question, not a guarantee, not a recommendation, not an operational
-      service. Dev-scope prototype.</p>
+      service. Distances are computed in metres (EPSG:25831); the mobility signal is a
+      7-day March-2024 window.</p>
 
     <!-- ===== Layers ===== -->
     <section id="layers-section">
@@ -166,10 +169,13 @@
         <li><strong>Relative index, not a guarantee.</strong> The score orders hexes within
           Catalonia; it makes no absolute or "you should move here" claim.</li>
         <li><strong>Dev-scope window.</strong> The mobility signal is <strong>7 days of
-          March 2024</strong> (2024-03-04 … 10), not a full year — a prototype slice.</li>
-        <li><strong>Sparse amenity coverage.</strong> Most of the grid has no nearby
-          station or gym in range; those cells are grey ("none within reach"), which is
-          itself the finding — not a low score.</li>
+          March 2024</strong> (2024-03-04 … 10), not a full year — a representative slice,
+          not a seasonal average.</li>
+        <li><strong>Sparse amenity layers.</strong> Some proximity layers cover only part
+          of the grid — climbing ~49%, hospitals ~31%, yoga ~15%, coast ~6%. Cells with
+          no amenity in the 10 km catchment simply earn no closeness reward there (and a
+          recoloured presence metric renders them grey) — that absence is itself the
+          finding, not a penalty.</li>
         <li><strong>Null is a distinct state.</strong> A missing value is rendered slate-grey,
           never as a ramp-low or zero value.</li>
       </ul>
@@ -181,60 +187,63 @@
         <summary><h2 style="display:inline">How it's scored — dimensions &amp; sources</h2></summary>
 
         <p class="caption" style="margin-top:10px">The liveability score sums six weighted
-          dimensions over each H3 cell. Each source below is tagged
-          <span class="src-tag live">live</span> (wired in this dev-scope prototype) or
-          <span class="src-tag planned">planned</span> (designed for v2, not yet fed into the
-          gold table). Default weights from <code>configs/weights.yaml</code>.</p>
+          dimensions over each H3 cell. Amenity closeness (climb, yoga, hospital, green) is
+          a <strong>saturating positive reward</strong> — full bonus at the doorstep,
+          decaying to zero at a 10 km catchment edge — so present-but-far always beats
+          absent. Genuine harms (air, heat, light, industry, motorway) stay negative. All
+          distances are computed in metres (EPSG:25831). Each source below is tagged
+          <span class="src-tag live">live</span> (wired to real data and feeding the gold
+          table) or <span class="src-tag planned">planned</span> (a refinement not yet fed
+          in). Default weights from <code>configs/weights.yaml</code>.</p>
 
         <table class="method-table">
           <thead><tr><th>Dimension</th><th>Sources</th></tr></thead>
           <tbody>
             <tr>
-              <td><strong>Mobility &amp; accessibility</strong><span class="w">w +1.4</span></td>
+              <td><strong>Mobility &amp; accessibility</strong><span class="w">w +1.4 / +1.0</span></td>
               <td>
-                <span class="src planned">Valhalla bike isochrones from train stations</span>
-                <span class="src live">train reach (5 km / 3 km buffer approximation)</span>
-                <span class="src planned">Renfe + FGC GTFS frequency to BCN</span>
+                <span class="src live">Renfe Rodalies + FGC GTFS frequency (trains/day at nearest stop, ~91 distinct values)</span>
+                <span class="src live">trains/day to BCN core (nearest stop)</span>
+                <span class="src planned">Valhalla bike isochrones from stations (refines the reach term)</span>
               </td>
             </tr>
             <tr>
-              <td><strong>Lifestyle</strong><span class="w">w −1.0</span></td>
+              <td><strong>Lifestyle</strong><span class="w">w +5 / +4</span></td>
               <td>
-                <span class="src live">OSM <code>sport=climbing</code> (37% of grid)</span>
-                <span class="src live">OSM <code>sport=yoga</code> (10% of grid)</span>
+                <span class="src live">OSM <code>sport=climbing</code> closeness reward (~49% of grid)</span>
+                <span class="src live">OSM <code>sport=yoga</code> closeness reward (~15% of grid)</span>
               </td>
             </tr>
             <tr>
               <td><strong>Nature</strong><span class="w">w +0.15…+6</span></td>
               <td>
-                <span class="src planned">OSM parks / forest / coastline distance</span>
-                <span class="src planned">Copernicus tree cover</span>
-                <span class="src planned">WDPA / Natura 2000</span>
-                <span class="src planned">iNaturalist density</span>
+                <span class="src live">OSM green closeness reward + sea-within-3km bonus</span>
+                <span class="src live">EEA Tree-Cover-Density 2018 (zonal-mean %)</span>
+                <span class="src live">Natura 2000 within 5 km (EEA terrestrial sites)</span>
+                <span class="src live">GBIF / iNaturalist observation density</span>
               </td>
             </tr>
             <tr>
               <td><strong>Environmental health</strong><span class="w">w −0.05…−2</span></td>
               <td>
-                <span class="src planned">EEA + XVPCA + CAMS NO₂ / PM₂.₅</span>
-                <span class="src planned">Landsat 8/9 LST — UHI Δ</span>
-                <span class="src planned">VIIRS DNB light pollution</span>
+                <span class="src live">XVPCA NO₂ / PM₂.₅ annual means, penalised above WHO-2021 guidelines</span>
+                <span class="src live">Landsat 8/9 LST — urban-heat-island Δ</span>
+                <span class="src live">VIIRS DNB night-light radiance</span>
               </td>
             </tr>
             <tr>
               <td><strong>Penalties</strong><span class="w">w −6 / −12</span></td>
               <td>
                 <span class="src live">OSM <code>landuse=industrial</code> density</span>
-                <span class="src planned">E-PRTR registry</span>
+                <span class="src live">E-PRTR facility proximity (nearest, inverse-distance)</span>
                 <span class="src live">motorway within 500 m</span>
               </td>
             </tr>
             <tr>
-              <td><strong>Health amenities</strong><span class="w">w −1.0 / +1</span></td>
+              <td><strong>Health amenities</strong><span class="w">w +5 / +1</span></td>
               <td>
-                <span class="src live">OSM hospitals (10% of grid)</span>
-                <span class="src planned">OSM pharmacy density</span>
-                <span class="src planned">CatSalut registry</span>
+                <span class="src live">OSM hospital closeness reward (~31% of grid)</span>
+                <span class="src live">OSM pharmacy density (log)</span>
               </td>
             </tr>
             <tr>
@@ -248,13 +257,14 @@
         </table>
 
         <p class="caption">
-          <span class="src-tag live">live</span> = a populated gold column you can recolour the
-          map by right now; <span class="src-tag planned">planned</span> = the v2 roadmap, currently
-          null (those cells render slate-grey). *the "vibe" weight is 0 by default — set positive
-          in <code>quiet_strict</code> to penalise busy through-flow. Train reach is a buffer
-          approximation pending real Valhalla isochrones.</p>
+          <span class="src-tag live">live</span> = a populated gold column, wired to real data,
+          that you can recolour the map by right now; <span class="src-tag planned">planned</span> =
+          a refinement not yet fed in — in v2.3 only Valhalla bike isochrones remain (they would
+          sharpen the train-reach term). *the "vibe" weight is 0 by default — set positive in
+          <code>quiet_strict</code> to penalise busy through-flow.</p>
         <p class="caption" style="margin-bottom:0">
-          Prototype is <strong>dev-scope</strong> (7 days, March 2024).
+          Score range under the default preset: min 8 · median 59 · mean 57 · max 100 · std 14
+          across 45,220 hexes. Mobility window is <strong>dev-scope</strong> (7 days, March 2024).
           <a href="v2_revision.md">See the v2 improvement roadmap →</a></p>
       </details>
     </section>

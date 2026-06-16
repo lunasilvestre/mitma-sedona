@@ -29,12 +29,38 @@ analytical grain. Sedona handles every spatial join. Pandera validates
 every bronze write.
 
 - **Bronze** — raw ingested sources (MITMA OD parquet, OSM POIs / network /
-  stations) with pandera contract enforcement on write.
+  stations, GTFS, air-quality stations, Landsat LST, Natura 2000, E-PRTR,
+  VIIRS) with pandera contract enforcement on write.
 - **Silver** — cleaned, conformed, geometry-validated layers.
 - **Gold** — the analytical grain: `data/gold/h3_res8_catalonia.parquet`,
-  45,220 hexes × 12 features at H3 res-8 (~0.7 km² hexes).
+  45,220 hexes at H3 res-8 (~0.7 km² hexes), carrying ~20 real feature columns
+  (mobility, amenity-proximity, nature, environmental-health and penalty terms)
+  plus the final `liveability_score`. Distance/buffer features are computed in
+  EPSG:25831 metres. The exact column contract is `GOLD_HEX_SCHEMA` in
+  `src/catmob/schemas.py`; `scripts/run_gold_v2.py` assembles the grid.
 
 See [PLAN.md §4](../PLAN.md) for the full lakehouse design.
+
+## I/O modules
+
+Each upstream source has a loader in `src/catmob/io_*.py` that ends with a
+pandera `SCHEMA.validate(df)`. As of v2.3 these produce **real** gold columns,
+not placeholders:
+
+- `io_mitma` — OD flows → `mitma_inflow_daily`, `mitma_outflow_daily`,
+  `mitma_through_ratio`.
+- `io_gtfs` — Rodalies + FGC feeds → `trains_per_day_nearest` (now ~91 distinct
+  values, not a constant 12) and `trains_to_bcn_nearest`.
+- `io_osm` — POIs + network → climb/yoga/hospital proximity, pharmacy density,
+  `motorway_within_500m`.
+- `io_air` / `io_pollution` — XVPCA stations + E-PRTR + VIIRS →
+  `no2_ugm3`, `pm25_ugm3`, `eprtr_facility_min_m`, `viirs_radiance`.
+- `io_thermal` — Landsat 8/9 LST → `lst_summer_median_c`, `uhi_delta_c`.
+- `io_biodiversity` / `io_health` — Natura 2000 + tree-cover + health POIs →
+  `natura2000_within_5km`, `tree_cover_pct`, `hospital_min_m`.
+
+Only the GBIF species-observation feed (`biodiversity_obs_density`) is not yet
+landed — its column is held NULL and contributes 0 to the score.
 
 ## Sedona SQL idioms
 

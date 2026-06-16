@@ -1,5 +1,18 @@
 # v2 Build Playbook — turn-key execution
 
+> ## Execution status (read first) — ✅ LARGELY EXECUTED (shipped as v2.3, live)
+> Most of the per-feature steps in this playbook have been **applied and shipped**. The live build is `scripts/run_gold_v2.py` → `data/gold/h3_res8_catalonia_v2.parquet` (45,220 hexes), surfaced at [explore.html](https://lunasilvestre.github.io/mitma-sedona/explore.html); per-column coverage is in `docs/story_data/manifest.json`.
+> - **§0 EPSG:25831 reprojection fix — DONE.** All distance/buffer math runs in metres (`run_gold_v2.py` uses `TRAIN_OUTER_M=5000` / `TRAIN_INNER_M=3000`, not the v1 degree buffers); the ~25% anisotropy is gone.
+> - **§1 nature + §1c/§2a amenity density/merge — DONE:** `green_min_m` (100%), `sea_min_m` (coastal strip), `pharmacy_density_per_km2` (100%), `hospital_min_m` (OSM ∪ CatSalut merge), `biodiversity_obs_density` (100%), `tree_cover_pct` (100%), `natura2000_within_5km` (100%, 231 sites).
+> - **§2b E-PRTR — DONE:** `eprtr_facility_min_m` (~98% within 50 km, 107 facilities).
+> - **§3 thermal — DONE:** `lst_summer_median_c` + `uhi_delta_c` (100%).
+> - **§4 air — DONE (XVPCA station path):** `no2_ugm3` (~41%) + `pm25_ugm3` (~20%); CAMS-grid gap-fill stays GATED/optional.
+> - **§5 VIIRS — DONE:** `viirs_radiance` (100%).
+> - **§6 GTFS — DONE:** real `trains_per_day_nearest` (91 distinct values, not constant 12) + `trains_to_bcn_nearest` (72 distinct); the two `io_gtfs.py` parser bugs were fixed.
+> - **§7 Valhalla bike isochrones — ⬜ THE ONLY REMAINING ITEM** (`VALHALLA_URL`-gated; the metric circular-buffer fallback ships, so it's pure-upside precision, off the critical path).
+>
+> Also note: the v2 scoring reformulation landed — amenity terms (`climb`/`yoga`/`green`/`hospital`) are now **saturating positive closeness rewards** (`scoring.py`, weight keys `*_reward`), so the per-feature "weight key" rows below that reference `climb_per_200m`/`green_per_200m`/`hospital_per_400m`-style distance penalties describe the **v1 keys**; the live keys are `climb_reward`/`yoga_reward`/`green_reward`/`hospital_reward` in `configs/weights.yaml`. Penalties stayed negative. Everything below is the original HOW, kept intact for the per-feature acquisition + wiring detail.
+
 **Companion to [`docs/v2_revision.md`](v2_revision.md).** That doc is the *strategy* (what/why, value÷effort waves). This is the *HOW*: per feature — the verified acquisition command, the exact code change, the gold column + weight key, the validation check + expected coverage, and an on-disk-NOW vs fetch-needed vs gated tag.
 
 Ground rules baked into every entry below:
@@ -11,9 +24,9 @@ Ground rules baked into every entry below:
 
 ---
 
-## 0. DO-FIRST: EPSG:25831 reprojection correctness fix
+## 0. DO-FIRST: EPSG:25831 reprojection correctness fix — ✅ DONE
 
-**This is the single highest-leverage change and it gates nothing — apply it before any data work.**
+**This is the single highest-leverage change and it gates nothing — apply it before any data work.** *(Applied: `scripts/run_gold_v2.py` buffers in metres `5000`/`3000` in EPSG:25831.)*
 
 | | |
 |---|---|
@@ -330,7 +343,7 @@ BCN-core stop names verified present (Barcelona-Sants 71801, Passeig de Gràcia 
 
 ---
 
-## 7. MOBILITY — Valhalla bike isochrones (GATED, never on critical path)
+## 7. MOBILITY — Valhalla bike isochrones (GATED, never on critical path) — ⬜ REMAINING (the only unshipped v2 item)
 
 | | |
 |---|---|
@@ -377,6 +390,8 @@ else:
 
 **Counts:** READY-NOW (on disk, no fetch) = **5** (`train_reach_min` reproj, `green_min_m`, `sea_min_m`, `pharmacy_density_per_km2`, `hospital_min_m`). FETCH-NEEDED (keyless, no gate beyond fetch) = **5** (`biodiversity_obs_density`, `tree_cover_pct`, `natura2000_within_5km`, `eprtr_facility_min_m` [⚠️ semi-manual], plus station `no2_ugm3` once its parser is rewritten). GATED = **6** (`trains_per_day_nearest`, `trains_to_bcn_nearest` [parser bugs], `pm25_ugm3` grid [CAMS account], `lst_summer_median_c`→`uhi_delta_c` [stackstac+fill-mask], `viirs_radiance` [dead source / tokens], Valhalla precision).
 
+> **SHIPPED-STATUS UPDATE (v2.3):** of the matrix above, **everything is now on disk and wired into the live gold layer except Valhalla** — the parser-gated rows cleared (GTFS bugs fixed → 91 distinct `trains_per_day_nearest`; `io_air` hourly→annual rewrite done → station `no2_ugm3`/`pm25_ugm3`; `stackstac`+fill-mask done → `lst_summer_median_c`/`uhi_delta_c`; VIIRS source replaced → `viirs_radiance` at 100% coverage). The only still-GATED row is **Valhalla bike-isochrone precision** (`VALHALLA_URL`); the CAMS PM₂.₅ *grid* gap-fill also stays optional on top of the shipped XVPCA-station path. Live coverage per column: `docs/story_data/manifest.json`.
+
 **v2 fetch wave-2 (2026-06-16):** all 4 heavy/keyless layers now on disk + downstream-verified — `biodiversity_obs_density`→`data/bronze/biodiversity/gbif_occurrences.parquet` (50k recs, schema-valid, source=`inaturalist`, divisor 0.737327, h3 v4 `latlng_to_cell`), `trains_per_day_nearest`/`trains_to_bcn_nearest`→`data/bronze/gtfs/{rodalies,fgc}/` (gated on 3 io_gtfs.py fixes: col-strip, national-bbox prefilter, FGC `calendar_dates` fallback), `lst_summer_median_c`→`data/bronze/thermal/lst_summer_jja_2024.tif` (composite already built; io_thermal needs rioxarray fallback + fill-0 mask, zonal needs h3 polygons), `viirs_radiance`→`data/bronze/pollution/viirs/viirs_ntl_2024_catalonia.tif` (io_pollution needs new `compute_viirs_radiance_per_hex` + `VIIRS_CATALONIA_TIF` const, zonal in EPSG:4326). Valhalla isochrones remain a separate Docker tile-build task, NOT in this wave.
 
 **v2 fetch wave (2026-06-16):** 4 of the 5 fetch-needed features now have bronze data on disk + downstream-verified. `tree_cover_pct` → `data/bronze/treecover/tcd_2018_catalonia.tif`; `natura2000_within_5km` → `data/bronze/natura2000/natura2000_catalonia.parquet`; `eprtr_facility_min_m` → `data/bronze/pollution/eprtr/spain.csv` (parser-clean, 107 post-clip); station `no2_ugm3`/`pm25_ugm3` raw → `data/bronze/air/xvpca/xvpca_hourly_2024.csv` (still needs the `io_air.parse_xvpca_csv` hourly→annual rewrite before it's a usable gold column). Only `biodiversity_obs_density` (GBIF) remains un-fetched in this wave. Wiring foot-guns to honor: paths land in feature-named dirs (treecover/natura2000/pollution/air), NOT the playbook's `data/bronze/nature/` default; TCD/N2K aggregation needs h3 cell **polygons** (`h3.cell_to_boundary`), not the silver centroids; N2K columns are EEA `SITECODE/SITENAME/SITETYPE` (bypass `filter_wdpa_to_catalonia`); `fetch_nature.sh` TCD size must be `4400,3900` (ImageServer `maxImageHeight=4100`), E-PRTR/CAMS bulk-zip URLs are dead — use the keyless discomap ArcGIS FeatureServer.
@@ -395,4 +410,4 @@ Single working tree → one ordered list, lowest-risk/highest-leverage first. Wi
 6. **STAC rasters** (§3, §5) — `lst_summer_median_c` → `uhi_delta_c` (install `stackstac`, apply the fill-value-0 mask), then `viirs_radiance` (gated on the replacement source + `awscli`/`gdal` or Earthdata token).
 7. **Valhalla isochrones** (§7) — last; switch the compose image to the nilsnolde successor, build tiles, set `VALHALLA_URL`. The §0 buffer fallback always ships, so this is pure upside off the critical path.
 
-**Single highest-leverage next build:** the **EPSG:25831 reprojection fix (§0)** — S-effort, no fetch, no dependency, fixes a ~25% anisotropic distortion already baked into a shipped scored column, and establishes the metric-CRS pattern every later distance feature reuses.
+**Single highest-leverage next build:** ✅ done — the **EPSG:25831 reprojection fix (§0)** landed first (S-effort, no fetch, fixed the ~25% anisotropic distortion and established the metric-CRS pattern every later distance feature reuses), then steps 2–6 shipped. **The single remaining build is step 7 — Valhalla bike isochrones** (§7): switch the compose image to the nilsnolde successor, build tiles, set `VALHALLA_URL`. The §0 buffer fallback already ships, so it is pure-upside precision off the critical path.

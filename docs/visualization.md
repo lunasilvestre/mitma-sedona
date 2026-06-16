@@ -12,25 +12,36 @@ that puts the liveability index on an interactive map beside a panel that
 explains the analysis and links back to the repo (it showcases the analysis; it
 does not embed source code).
 
-- **Dark UI over satellite:** dark semi-transparent panels over keyless Esri
-  World Imagery, with 45,220 H3 res-8 hexes on top.
-- **Layers + controls:** the liveability output (viridis), a **preset** selector
-  (default / nature_first / quiet_strict / amenity_first) and a **metric**
-  selector that recolours the hexes by an analytic dimension (MITMA inflow,
-  through-ratio on a diverging RdBu ramp, train/climbing reach as presence,
-  industry density, motorway proximity); a **2.5D extrude** toggle; and input
-  layers for MITMA OD arcs and OSM amenities.
+- **Selectable basemaps:** dark semi-transparent panels over a switchable
+  basemap — Satellite (keyless Esri World Imagery), Dark (CARTO dark matter),
+  Light (CARTO Positron), or OSM (OpenFreeMap Bright) — with the 45,220 H3 res-8
+  hexes on top, and a **hex-opacity slider** to fade the grid against the map.
+- **Layers + controls:** the liveability output (default colouring), a **preset**
+  selector (default / nature_first / quiet_strict / amenity_first) and a
+  **metric** selector that recolours the hexes by any of **15 analytic
+  dimensions** — MITMA inflow and through-ratio (diverging RdBu), train reach
+  and trains-to-BCN, climbing reach, tree cover, Natura 2000, biodiversity
+  density, NO₂, PM2.5, UHI delta, VIIRS night-light, E-PRTR proximity, industry
+  density and motorway proximity. Recolouring is consistent: **bright = more
+  liveable** across every metric. A **2.5D extrude** toggle and input layers for
+  MITMA OD arcs and OSM amenities round out the controls.
 - **Honest by design:** liveability is stated as a *relative index, a starting
   question, not a guarantee* — and sparse coverage is shown as a distinct
-  slate-grey "none within reach" state, never as 0. The left panel carries the
-  headline numbers, coverage bars, scope caveats and a Mermaid pipeline diagram.
+  slate-grey "none within reach" state, never as 0. The left study panel carries
+  the headline numbers (45,220 hexes; default-preset median ≈ 59), per-column
+  coverage bars, scope caveats and a Mermaid pipeline diagram.
 
 The page is built from pinned CDN libraries only (deck.gl 9.3.2, MapLibre GL
 4.7.1, h3-js 4.1.0, Mermaid 11), with **zero build step** — it serves straight
-from GitHub Pages.
+from GitHub Pages at
+<https://lunasilvestre.github.io/mitma-sedona/explore.html>.
 
-> This is a **dev-scope prototype**. Coverage is sparse for several amenity
-> layers, and the liveability score is a relative index rather than a guarantee.
+> **Scope caveat.** The data window is dev-scope (7 days of March 2024 for the
+> hourly MITMA flows), coverage is still sparse for a few amenity-proximity
+> layers (yoga, sea, hospital), and the liveability score is a *relative* index
+> rather than a guarantee. The scoring itself is now sound: amenity terms are
+> saturating closeness rewards (near beats far beats absent) and all distances
+> are computed in EPSG:25831 metres.
 
 ## Visualisation stack
 

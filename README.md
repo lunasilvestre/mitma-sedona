@@ -18,22 +18,29 @@ lifting. A real personal question, answered with real data engineering — and a
 portfolio piece that shows the operational shape of a geospatial scoring
 pipeline under open-data constraints.
 
-> **▶ [Explore the interactive geo-browser →](docs/explore.html)** — a dark,
+> **▶ [Explore the interactive geo-browser →](https://lunasilvestre.github.io/mitma-sedona/explore.html)** — a
 > satellite-backed map of the liveability index: 45,220 H3 res-8 hexes over
-> keyless Esri World Imagery, with a preset selector, an analytic-metric
-> recolour, a 2.5D extrude toggle, and MITMA OD arcs + OSM amenity inputs.
-> Pure static (deck.gl + MapLibre + h3-js, zero build step), served from GitHub
-> Pages. Source: [`docs/explore.html`](docs/explore.html) +
+> keyless Esri World Imagery, with a preset selector, **15 toggleable analytic
+> metrics** (recolour consistently bright = more liveable), satellite +
+> dark/light/OSM basemaps, a hex-opacity slider, a study panel, an embedded
+> Mermaid pipeline, and MITMA OD arcs + OSM amenity inputs. Pure static
+> (deck.gl + MapLibre + h3-js, zero build step), served from GitHub Pages.
+> Source: [`docs/explore.html`](docs/explore.html) +
 > [`docs/app/geobrowser-map.js`](docs/app/geobrowser-map.js).
 
-> **Status — dev-scope prototype (2026-06).** A thin, honest end-to-end slice:
-> the Sedona/Spark pipeline runs on **real Catalonia data** (7-day dev window,
-> 2024-03-04..10) and emits `data/gold/h3_res8_catalonia.parquet` (45,220 hexes)
-> plus the geo-browser. The score is **structurally complete but empirically
-> thin** — 12 of 24 feature columns carry real signal today; the rest are wired
-> with weights and return as v2 work. Scope boundaries: liveability is a
-> *relative index*, not a guarantee; coverage is sparse in places; mobility uses
-> buffer approximations, not routed isochrones yet. See
+> **Status — shipped & corrected (v2.3, 2026-06).** A full end-to-end index,
+> [**live on GitHub Pages**](https://lunasilvestre.github.io/mitma-sedona/explore.html).
+> The Sedona/Spark pipeline runs on **real Catalonia data** (7-day dev window,
+> 2024-03-04..10) and emits `data/gold/h3_res8_catalonia_v2.parquet` (45,220
+> hexes × 26 columns) plus the geo-browser. **Every dimension is now wired to
+> real data** — GTFS train frequency, amenities, nature, environmental health,
+> and penalties all carry signal (coverage varies by layer). The v1 scoring
+> flaw is fixed: amenity proximity is now a **saturating positive closeness
+> reward**, not a distance penalty, and all distances are computed in
+> **EPSG:25831 metres** (the old degree-buffer distortion is gone). Honest
+> caveats that still hold: this is **7 days of March 2024**, liveability is a
+> *relative index* (not a guarantee), and some amenity layers are sparse. Only
+> optional Valhalla bike isochrones remain. The full before/after record:
 > [`docs/v2_revision.md`](docs/v2_revision.md).
 
 ## Why this exists
@@ -61,7 +68,7 @@ flowchart TD
     ENV -->|"io_air / io_thermal / io_biodiversity / …"| BRONZE
 
     BRONZE -->|"clean · conform · make_valid"| SILVER["Silver<br>(geometry-validated layers)"]
-    SILVER -->|"H3 res-8 explode + spatial joins<br>(Sedona SQL)"| GOLD["Gold<br>h3_res8_catalonia.parquet<br>45,220 hexes × features"]
+    SILVER -->|"H3 res-8 explode + spatial joins<br>(Sedona SQL)"| GOLD["Gold<br>h3_res8_catalonia_v2.parquet<br>45,220 hexes × 26 columns"]
 
     GOLD -->|"catmob.scoring.score_hex<br>(configs/weights.yaml, 4 presets)"| SCORE["liveability_score<br>per hex × preset"]
     SCORE --> BROWSER["Geo-browser<br>(docs/explore.html)"]
@@ -74,29 +81,30 @@ every spatial join. Detail: [`docs/architecture.md`](docs/architecture.md) ·
 
 ## The liveability score
 
-A per-hex weighted sum over ~25 features across **6 dimensions**, computed at
-H3 res-8. It is a **relative index** — a starting question, not a guarantee.
+A per-hex weighted sum over 26 feature columns across **6 dimensions**, computed
+at H3 res-8. It is a **relative index** — a starting question, not a guarantee.
 NULL features (sparse coverage) are kept as a distinct *"none within reach"*
-state, never silently rendered as 0.
+state, never silently rendered as 0. Amenity terms (climb / yoga / hospital /
+green) are **saturating positive closeness rewards** — full bonus on the
+doorstep, decaying to 0 at the 10 km catchment edge — so presence always beats
+absence and near beats far. Every distance is computed in **EPSG:25831 metres**.
 
 | Dimension | Sources | Status |
 |---|---|:--:|
-| Mobility & accessibility | Bike reach from train stations, Renfe + FGC GTFS frequency to BCN | **LIVE** (buffer approx.) / v2 Valhalla isochrones |
-| Lifestyle | OSM `sport=climbing`, `sport=yoga` | **LIVE** |
+| Mobility & accessibility | Train reach from stations, **Renfe Rodalies + FGC GTFS frequency** (`trains_per_day_nearest`, `trains_to_bcn_nearest`) | **LIVE** · optional Valhalla isochrones would refine reach |
+| Lifestyle | OSM `sport=climbing`, `sport=yoga` (closeness reward) | **LIVE** |
 | Mobility "vibe" | MITMA daily OD inflow / outflow, through-flow ratio | **LIVE** |
-| Penalties | OSM `landuse=industrial`, E-PRTR registry, motorway proximity | **LIVE** (industry + motorway) / v2 E-PRTR |
-| Health amenities | OSM hospitals / pharmacies, CatSalut registry | **LIVE** (hospital) / v2 pharmacy density |
-| Nature | OSM parks / forest / coastline, Copernicus tree cover, WDPA / Natura 2000, iNaturalist | v2-PLANNED |
-| Environmental health | EEA + XVPCA + CAMS NO₂/PM₂.₅, Landsat LST urban-heat Δ, VIIRS light pollution | v2-PLANNED |
+| Penalties | OSM `landuse=industrial`, **E-PRTR registry** (nearest-facility), motorway proximity | **LIVE** |
+| Health amenities | OSM hospitals ∪ CatSalut registry, OSM pharmacy density | **LIVE** |
+| Nature | OSM parks / coastline, **Copernicus tree cover**, **Natura 2000** (land-clipped), **GBIF/iNaturalist** biodiversity | **LIVE** |
+| Environmental health | **XVPCA NO₂/PM₂.₅** (WHO-2021 thresholds), **Landsat LST urban-heat Δ**, **VIIRS light pollution** | **LIVE** |
 
 Default weights are balanced across the six dimensions; three presets re-weight
 them — **`nature_first`** (green/sea + biodiversity), **`quiet_strict`**
 (harder noise/industry penalty), **`amenity_first`** (health + lifestyle). The
 scoring function is `catmob.scoring.score_hex`, driven by
-[`configs/weights.yaml`](configs/weights.yaml). Because every planned column
-already has a weight key (a NULL contributes `0`), the index is structurally
-complete and populating v2 columns is pure upside, no scoring refactor. Full
-methodology: [`docs/scoring.md`](docs/scoring.md).
+[`configs/weights.yaml`](configs/weights.yaml). Full methodology:
+[`docs/scoring.md`](docs/scoring.md).
 
 ## Data sources
 
@@ -117,7 +125,7 @@ All open, all citable. Condensed table below; full catalog + licences in
 
 **Default data window:** Q1+Q2 2024 daily MITMA + all March 2024 hourly MITMA
 (~3.5 GB bronze). `--scope dev` uses the 7-day window (2024-03-04..10) the
-prototype run was built on.
+shipped v2.3 run was built on.
 
 ## Stack & architecture
 
@@ -129,7 +137,7 @@ prototype run was built on.
 | Library | `src/catmob/` (schemas, io, scoring, viz) | reusable, testable, notebook-agnostic |
 | Visualisation | **deck.gl 9.3 + MapLibre GL 4.7 + h3-js**, keyless, zero build | static GitHub Pages, no backend |
 
-Sedona handles every spatial join; the v1 gold layer at this data size actually
+Sedona handles every spatial join; the gold layer at this data size actually
 runs faster as plain pandas + geopandas + h3-py (a classloader-mismatch on the
 Sedona spatial-index serde — see the retrospective), while bronze + the 27 M-row
 MITMA aggregation stay on Sedona where it pays off. Repo layout +
@@ -138,24 +146,27 @@ idioms used (H3 cell-id explode, dasymetric disaggregation, `RS_ZonalStats`,
 `ST_KNN`, `BROADCAST` hints, GeoArrow zero-copy, `MAX_BY` peak-hour, `ST_DBSCAN`):
 [`docs/sedona_sql_patterns.md`](docs/sedona_sql_patterns.md).
 
-## Results (dev-scope prototype)
+## Results (v2.3)
 
-The first end-to-end Sedona run on real Catalonia data (7-day dev window,
-~5 min pipeline time) produced:
+The corrected end-to-end run on real Catalonia data (7-day dev window) produced:
 
-- **`data/gold/h3_res8_catalonia.parquet`** — **45,220 hexes × 12 features**, 1.6 MB.
-- 27.7 M MITMA OD rows ingested, 4,935 OSM POIs, 475 stations, 364,530 highway ways.
-- Score distribution across all hexes: min 0 · median 50 · mean 40.7 · max 64.0 · stdev 14.2.
+- **`data/gold/h3_res8_catalonia_v2.parquet`** — **45,220 hexes × 26 columns**, every dimension wired to real data.
+- 27.7 M MITMA OD rows ingested, plus real GTFS frequency (Renfe Rodalies + FGC), OSM amenities, Copernicus tree cover, Natura 2000, GBIF biodiversity, XVPCA air, Landsat LST, VIIRS, and E-PRTR.
+- Default-preset score distribution: min 7.9 · median 59.3 · mean 57.1 · max 100.0 · stdev 14.3.
 
-**Honest caveats.** The default-weights top-10 is dominated by small inland
-towns in Girona / Lleida that hit the max (64.0) because their negative
-penalties don't apply *and* their climbing / yoga / hospital distances are NULL
-(beyond the cap) — a relative index will rank thin coverage optimistically.
-This is **7 days of March 2024**, mobility uses **buffer approximations** (5 km /
-3 km Euclidean circles ≈ 25 / 15 min by bike, not Valhalla isochrones), and the
-score is a **relative index, not a guarantee**. Full numbers, the top-10 table,
-and the retrospective ("what tripped us / how we fixed it"):
-[`docs/results.md`](docs/results.md).
+**What the fix changed.** With amenity proximity reformulated as a saturating
+**positive** closeness reward (and all distances in EPSG:25831 metres), the
+index now discriminates properly: the top-scoring hexes are **Barcelona core
+and the well-served coast**, not the empty inland Girona / Lleida towns that v1
+wrongly ranked at the top (they scored high only because their penalties didn't
+apply *and* their amenity distances were NULL). Reus, for example, now scores
+≈ 51.5 (default), up from v1's 21.6.
+
+**Honest caveats that still hold.** This is **7 days of March 2024**, the score
+is a **relative index, not a guarantee**, and some amenity layers are sparse
+(e.g. yoga ~15 %, sea ~6 % coverage). Only optional Valhalla bike isochrones
+would further refine the train-reach term. Full numbers, the top-10 table, and
+the retrospective: [`docs/results.md`](docs/results.md).
 
 ## Repository layout
 
@@ -173,6 +184,7 @@ mitma-sedona/
 ├── tests/                          # 44 contract tests (pytest -q)
 ├── data/                           # bronze / silver / gold (+ data/README.md catalog)
 ├── docker/                         # Sedona + Valhalla + Jupyter compose stack
+├── scripts/run_gold_v2.py          # builds the v2 gold layer (reproj fix + full enrichment)
 ├── scripts/fetch_*.sh              # idempotent data fetchers
 └── docs/
     ├── explore.html                # the interactive geo-browser (GitHub Pages star)
@@ -202,15 +214,17 @@ Valhalla on :8002). The 44 contract tests cover schema enforcement, MITMA
 CSV.gz parsing, OSM POI categorisation, XVPCA air-quality parsing, geo
 invariants, and URL builders — CI runs them on every push.
 
-## v2 roadmap
+## v2 — what shipped
 
-v1 shipped the runtime and a real (if thin) score: **12 of 24 feature columns
-carry real signal**, mobility is buffer-approximated, and 12 environmental /
-nature / amenity columns are wired but NULL. v2 turns each NULL/shortcut into a
-source-backed column (EEA/CAMS air, Landsat/VIIRS STAC, WDPA, iNaturalist,
-E-PRTR, Copernicus TCD) plus Valhalla bike isochrones and GTFS frequency, reusing
-the documented Sedona patterns — no scoring refactor. The full feature-by-feature
-plan with effort/impact estimates: [`docs/v2_revision.md`](docs/v2_revision.md).
+v2 is **done**. The plan to turn every NULL/shortcut into a source-backed column
+has been executed: real GTFS frequency (Renfe Rodalies + FGC), Copernicus tree
+cover, Natura 2000, GBIF/iNaturalist biodiversity, XVPCA NO₂/PM₂.₅, Landsat LST
+urban-heat Δ, VIIRS light pollution, and E-PRTR — all wired and live, all in
+EPSG:25831 metres, reusing the documented Sedona patterns. The scoring flaw
+(amenity distance as a penalty) was fixed by switching to saturating positive
+closeness rewards. The only deferred item is **optional** Valhalla bike
+isochrones, which would refine the train-reach term. The full before/after
+record with effort/impact estimates: [`docs/v2_revision.md`](docs/v2_revision.md).
 
 ## Deeper docs
 
@@ -221,7 +235,7 @@ plan with effort/impact estimates: [`docs/v2_revision.md`](docs/v2_revision.md).
 | [docs/scoring.md](docs/scoring.md) | The liveability score: 6 dimensions, weights, and the four presets |
 | [docs/data_sources.md](docs/data_sources.md) | Every upstream source + licence + the default data window |
 | [docs/visualization.md](docs/visualization.md) | The deck.gl / Lonboard stack and the explore.html geo-browser |
-| [docs/results.md](docs/results.md) | Prototype artifacts, Top-10, score distribution, and the retrospective |
+| [docs/results.md](docs/results.md) | Gold artifacts, Top-10, score distribution, and the retrospective |
 | [docs/sedona_sql_patterns.md](docs/sedona_sql_patterns.md) | 8 advanced Sedona SQL patterns (H3 explode, dasymetric, `RS_ZonalStats`, …) |
 | [docs/v2_revision.md](docs/v2_revision.md) | Path from dev-scope prototype to a complete, defensible index |
 | [PLAN.md](PLAN.md) | Canonical planning doc + full milestone breakdown |
