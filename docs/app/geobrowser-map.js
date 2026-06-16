@@ -143,9 +143,45 @@
       column: 'train_reach_min', ramp: 'viridis', label: 'Train reach (min, bike)',
       kind: 'presence', invert: true, unit: ' min', lowLabel: 'near', highLabel: 'far'
     },
+    trains_to_bcn_nearest: {
+      column: 'trains_to_bcn_nearest', ramp: 'magma', label: 'Trains/day to BCN core',
+      kind: 'sequential', unit: ' trips/day', lowLabel: 'none', highLabel: 'frequent'
+    },
     climb_min_m: {
       column: 'climb_min_m', ramp: 'viridis', label: 'Climbing gym (min away)',
       kind: 'presence', invert: true, unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    tree_cover_pct: {
+      column: 'tree_cover_pct', ramp: 'viridis', label: 'Tree-cover density (%)',
+      kind: 'sequential', unit: ' %', lowLabel: 'bare', highLabel: 'forested'
+    },
+    natura2000_within_5km: {
+      column: 'natura2000_within_5km', ramp: 'viridis', label: 'Natura 2000 within 5 km',
+      kind: 'boolean', unit: '', lowLabel: 'no', highLabel: 'yes'
+    },
+    biodiversity_obs_density: {
+      column: 'biodiversity_obs_density', ramp: 'viridis', label: 'Biodiversity obs density (/km²)',
+      kind: 'sequential', unit: ' /km²', lowLabel: 'few', highLabel: 'many'
+    },
+    no2_ugm3: {
+      column: 'no2_ugm3', ramp: 'magma', label: 'NO₂ annual mean (µg/m³)',
+      kind: 'sequential', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
+    },
+    pm25_ugm3: {
+      column: 'pm25_ugm3', ramp: 'magma', label: 'PM₂.₅ annual mean (µg/m³)',
+      kind: 'sequential', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
+    },
+    uhi_delta_c: {
+      column: 'uhi_delta_c', ramp: 'magma', label: 'Urban-heat-island Δ (°C)',
+      kind: 'diverging', pivot: 0.0, unit: ' °C', lowLabel: 'cooler', highLabel: 'hotter'
+    },
+    viirs_radiance: {
+      column: 'viirs_radiance', ramp: 'magma', label: 'Night-light radiance (VIIRS)',
+      kind: 'sequential', unit: '', lowLabel: 'dark', highLabel: 'bright'
+    },
+    eprtr_facility_min_m: {
+      column: 'eprtr_facility_min_m', ramp: 'magma', label: 'E-PRTR facility (m away)',
+      kind: 'presence', invert: true, unit: ' m', lowLabel: 'near', highLabel: 'far'
     },
     industry_density_per_km2: {
       column: 'industry_density_per_km2', ramp: 'magma', label: 'Industry density (/km²)',

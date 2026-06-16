@@ -20,6 +20,14 @@ VIIRS_STAC_COLLECTION = "viirs-monthly-v22"
 
 CATALONIA_BBOX: tuple[float, float, float, float] = (0.15, 40.50, 3.35, 42.90)
 
+#: On-disk VIIRS night-time-lights annual composite over Catalonia (COG,
+#: EPSG:4326, float32 nW/cm²/sr, fill = -3.402823e38). Built by the v2 fetch
+#: wave; the dead ``viirs-monthly-v22`` PC collection no longer resolves.
+VIIRS_CATALONIA_TIF = "data/bronze/pollution/viirs/viirs_ntl_2024_catalonia.tif"
+
+#: float32 NaN-fill sentinel used by the VIIRS COG (GDAL default nodata).
+VIIRS_NODATA = -3.402823e38
+
 
 # ---------------------------------------------------------------------------
 # E-PRTR — facility CSV (Spain extract)
@@ -63,7 +71,50 @@ def parse_eprtr_facilities(
 
 
 # ---------------------------------------------------------------------------
-# VIIRS DNB monthly — Planetary Computer STAC
+# VIIRS radiance — zonal mean per H3 cell from an on-disk COG.
+# Mirrors catmob.io_biodiversity.compute_tree_cover_per_hex (rasterstats zonal
+# mean over H3 cell-boundary POLYGONS). The raster and the polygons are both
+# EPSG:4326, so NO reprojection is needed before the zonal pass.
+# ---------------------------------------------------------------------------
+
+def compute_viirs_radiance_per_hex(viirs_raster_path, hex_polys) -> "pd.DataFrame":
+    """Mean VIIRS night-light radiance per H3 cell via rasterstats.
+
+    Parameters
+    ----------
+    viirs_raster_path
+        Path to the VIIRS COG (EPSG:4326, float32, fill = ``VIIRS_NODATA``).
+    hex_polys
+        A GeoDataFrame of H3 cell-boundary polygons in EPSG:4326 with an
+        ``h3_id`` column (``h3.cell_to_boundary``). Both layers share the
+        raster CRS, so the zonal pass runs without reprojection.
+
+    Returns ``DataFrame[h3_id, viirs_radiance]`` with radiance clamped to
+    ``max(0, value)`` (negative dark-current artefacts -> 0; the schema slot
+    is ``ge(0)``). NULL where no pixel falls inside the cell.
+    """
+    try:
+        from rasterstats import zonal_stats  # type: ignore
+    except ImportError as e:  # pragma: no cover - env guard
+        raise RuntimeError(
+            "compute_viirs_radiance_per_hex needs `rasterstats`. Install: "
+            "pip install rasterstats"
+        ) from e
+
+    stats = zonal_stats(
+        hex_polys, str(viirs_raster_path),
+        stats=["mean"], nodata=VIIRS_NODATA, all_touched=True,
+    )
+    out = hex_polys[["h3_id"]].copy()
+    out["viirs_radiance"] = [
+        (max(0.0, float(s["mean"])) if s["mean"] is not None else None)
+        for s in stats
+    ]
+    return out
+
+
+# ---------------------------------------------------------------------------
+# VIIRS DNB monthly — Planetary Computer STAC (legacy; collection now dead)
 # ---------------------------------------------------------------------------
 
 def _open_stac_client():

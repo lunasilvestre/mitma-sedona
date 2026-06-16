@@ -42,6 +42,10 @@ HEX_COLS = [
     # v2.1 next-wave features
     "tree_cover_pct", "natura2000_within_5km", "eprtr_facility_min_m",
     "no2_ugm3", "pm25_ugm3",
+    # v2.3 next-wave features (biodiversity / VIIRS / LST→UHI / GTFS)
+    "biodiversity_obs_density", "viirs_radiance",
+    "lst_summer_median_c", "uhi_delta_c",
+    "trains_per_day_nearest", "trains_to_bcn_nearest",
     "mitma_inflow_daily", "mitma_outflow_daily", "mitma_through_ratio",
     "motorway_within_500m", "industry_density_per_km2",
 ]
@@ -141,6 +145,17 @@ def _round_hex_fields(df: pd.DataFrame) -> None:
     if "natura2000_within_5km" in df:
         # nullable boolean -> bool (no NaN in this column; all hexes resolved)
         df["natura2000_within_5km"] = df["natura2000_within_5km"].astype(bool)
+    # v2.3 next-wave fields. biodiversity/viirs/lst/uhi -> 2/1 dp; trains -> int.
+    if "biodiversity_obs_density" in df:
+        df["biodiversity_obs_density"] = df["biodiversity_obs_density"].round(2)
+    if "viirs_radiance" in df:
+        df["viirs_radiance"] = df["viirs_radiance"].round(2)
+    for c in ("lst_summer_median_c", "uhi_delta_c"):
+        if c in df:
+            df[c] = df[c].round(1)
+    for c in ("trains_per_day_nearest", "trains_to_bcn_nearest"):
+        if c in df:
+            df[c] = df[c].round().astype("Int64")
 
 
 def main() -> None:

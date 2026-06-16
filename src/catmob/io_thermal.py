@@ -97,37 +97,67 @@ def composite_lst_summer_median(
     try:
         import stackstac  # type: ignore
         import pystac
-    except ImportError as e:
-        raise RuntimeError(
-            "composite_lst_summer_median needs `stackstac`. Install with: "
-            "pip install stackstac"
-        ) from e
+    except ImportError:
+        stackstac = None  # type: ignore
 
-    pystac_items = [pystac.Item.from_dict(d) for d in items]
-    stack = stackstac.stack(
-        pystac_items,
-        assets=["lwir11"],  # Landsat C2L2 thermal band
-        bounds_latlon=bbox,
-        resolution=100,    # downsample 30m → 100m for speed
-        epsg=25831,        # ETRS89 / UTM 31N (good for Catalonia)
-        rescale=False,     # we apply the DN scaling manually below
-    )
-    # ST_B10 DN → Kelvin → °C
-    lst_kelvin = stack * 0.00341802 + 149.0
-    lst_celsius = lst_kelvin - 273.15
-    lst_summer = lst_celsius.median(dim="time")
+    if stackstac is not None:
+        import pystac
+        pystac_items = [pystac.Item.from_dict(d) for d in items]
+        stack = stackstac.stack(
+            pystac_items,
+            assets=["lwir11"],  # Landsat C2L2 thermal band
+            bounds_latlon=bbox,
+            resolution=100,    # downsample 30m → 100m for speed
+            epsg=25831,        # ETRS89 / UTM 31N (good for Catalonia)
+            rescale=False,     # we apply the DN scaling manually below
+        )
+        # Landsat C2L2 fill value is 0 → masking BEFORE the scale/median keeps
+        # the 0 → 149 K → −124 °C floor out of the per-pixel median.
+        stack = stack.where(stack != 0)
+        lst_kelvin = stack * 0.00341802 + 149.0
+        lst_celsius = lst_kelvin - 273.15
+        lst_summer = lst_celsius.median(dim="time")
+    else:
+        # rioxarray fallback (stackstac absent in the sedona env): open each
+        # signed asset href, mask the 0-fill, scale to °C, stack and median.
+        import rioxarray  # type: ignore
+        import xarray as xr
+
+        arrs = []
+        for d in items:
+            href = d["assets"]["lwir11"]["href"]
+            da = rioxarray.open_rasterio(href, masked=True).squeeze("band", drop=True)
+            da = da.where(da != 0)                       # mask Landsat 0-fill
+            da = da * 0.00341802 + 149.0 - 273.15        # DN → Kelvin → °C
+            arrs.append(da)
+        stack = xr.concat(arrs, dim="time")
+        lst_summer = stack.median(dim="time")
 
     if out_path is not None:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        # Compute then write
-        arr = lst_summer.compute()
+        arr = lst_summer.compute() if hasattr(lst_summer, "compute") else lst_summer
         arr.rio.to_raster(out_path, driver="COG", compress="DEFLATE")
     return lst_summer
 
 
-def lst_zonal_mean_per_hex(lst_raster_path: Path | str, hex_grid_path: Path | str):
-    """Compute mean LST per H3 hex from a composited LST raster.
+def lst_zonal_mean_per_hex(lst_raster_path: Path | str, hex_grid):
+    """Compute mean summer LST + UHI delta per H3 hex from a composited raster.
+
+    Parameters
+    ----------
+    lst_raster_path
+        Path to the composited summer-median LST COG (EPSG:25831, °C, fill =
+        NaN — the fetch wave already masked the Landsat C2L2 0-fill, so the
+        composite carries no spurious −124 °C pixels).
+    hex_grid
+        Either a path to an H3 grid file, OR a GeoDataFrame of H3 cell-boundary
+        POLYGONS (``h3.cell_to_boundary``) in the raster CRS with an ``h3_id``
+        column. Polygons (not centroids) are required for the zonal pass.
+
+    The fill sentinel is ``np.nan`` (NOT ``-9999`` — the composite has none);
+    the ship-first rural baseline is the global 0.25 quantile of the per-hex
+    LST. ``uhi_delta_c = lst − rural_baseline``.
 
     Pure-Python (rasterstats); the Sedona equivalent (RS_ZonalStats) is
     documented in docs/sedona_sql_patterns.md §4.
@@ -141,12 +171,14 @@ def lst_zonal_mean_per_hex(lst_raster_path: Path | str, hex_grid_path: Path | st
         ) from e
 
     import geopandas as gpd
+    import numpy as np
 
-    hexes = gpd.read_file(hex_grid_path)
+    hexes = hex_grid if isinstance(hex_grid, gpd.GeoDataFrame) else gpd.read_file(hex_grid)
     stats = zonal_stats(
         hexes, str(lst_raster_path),
-        stats=["mean"], nodata=-9999, all_touched=False,
+        stats=["mean"], nodata=np.nan, all_touched=True,
     )
+    hexes = hexes.copy()
     hexes["lst_summer_median_c"] = [s["mean"] for s in stats]
 
     rural_baseline = hexes["lst_summer_median_c"].quantile(0.25)

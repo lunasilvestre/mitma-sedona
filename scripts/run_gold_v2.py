@@ -295,6 +295,112 @@ def _join_pollutant(contaminant: str, out_col: str) -> None:
 _join_pollutant("NO2", "no2_ugm3")
 _join_pollutant("PM2.5", "pm25_ugm3")
 
+# === v2.3 NEXT-WAVE ENRICHMENT (biodiversity / VIIRS / LST→UHI / GTFS) ======
+# scoring.py already carries the weight terms for all 4; no formula change. The
+# H3 cell-boundary POLYGONS (hex_polys / hex_polys_m) built above are reused for
+# the two raster-zonal layers (VIIRS in 4326, LST in 25831).
+
+
+def _to_hex_str(c):
+    """int H3 cell id -> hex string (idempotent if already a str)."""
+    return c if isinstance(c, str) else h3.int_to_str(int(c))
+
+# 4j. biodiversity_obs_density — GBIF/iNaturalist obs count per H3 / hex area --
+# data/bronze/biodiversity/gbif_occurrences.parquet (50k research-grade recs,
+# lon/lat). h3 v4 latlng_to_cell per record -> count -> density. NATURE reward
+# (scoring: log1p(density)*biodiversity_obs_log; log1p absorbs citizen-science
+# clustering bias). Divisor is the precise res-8 hex area (km²).
+print("Biodiversity obs density (GBIF iNaturalist count / hex area) ...")
+RES8_HEX_KM2_EXACT = 0.737327
+obs = pd.read_parquet(REPO / "data/bronze/biodiversity/gbif_occurrences.parquet")
+obs["h3_id"] = [
+    h3.latlng_to_cell(la, lo, 8) for la, lo in zip(obs["lat"].to_numpy(), obs["lon"].to_numpy())
+]
+bio_counts = obs.groupby("h3_id").size()
+hexes["biodiversity_obs_density"] = (
+    hexes["h3_id"].map(bio_counts).fillna(0) / RES8_HEX_KM2_EXACT
+)
+n_bio = int((hexes["biodiversity_obs_density"] > 0).sum())
+print(f"  biodiversity: {len(obs):,} obs / {n_bio:,}/{len(hexes):,} hexes with >=1 obs "
+      f"(max {hexes['biodiversity_obs_density'].max():.1f}/km2)")
+pd.DataFrame({
+    "h3_id": hexes["h3_id"].apply(_to_hex_str),
+    "biodiversity_obs_density": hexes["biodiversity_obs_density"].values,
+}).to_parquet(SILVER / "biodiversity_per_hex.parquet", index=False)
+
+# 4k. viirs_radiance — zonal mean of the VIIRS NTL COG per H3 cell (PENALTY) --
+# data/bronze/pollution/viirs/viirs_ntl_2024_catalonia.tif (COG EPSG:4326,
+# float32, fill=-3.402823e38). io_pollution.compute_viirs_radiance_per_hex does
+# rasterstats zonal mean (all_touched, clamp max(0,v)) over the 4326 hex polys —
+# raster + polys both 4326, NO reprojection. Light-pollution PENALTY tiebreaker.
+print("VIIRS radiance (zonal mean per H3 cell, EPSG:4326, no reproject) ...")
+from catmob.io_pollution import VIIRS_CATALONIA_TIF, compute_viirs_radiance_per_hex  # noqa: E402
+
+viirs = compute_viirs_radiance_per_hex(REPO / VIIRS_CATALONIA_TIF, hex_polys)
+hexes["viirs_radiance"] = hexes["h3_id"].map(viirs.set_index("h3_id")["viirs_radiance"])
+n_v = int(hexes["viirs_radiance"].notna().sum())
+print(f"  viirs: {n_v:,}/{len(hexes):,} hexes with a value "
+      f"(median {np.nanmedian(hexes['viirs_radiance']):.2f}, max {np.nanmax(hexes['viirs_radiance']):.1f})")
+pd.DataFrame({
+    "h3_id": hexes["h3_id"].apply(_to_hex_str),
+    "viirs_radiance": hexes["viirs_radiance"].values,
+}).to_parquet(SILVER / "viirs_per_hex.parquet", index=False)
+
+# 4l. lst_summer_median_c -> uhi_delta_c — zonal mean LST per H3 cell ----------
+# data/bronze/thermal/lst_summer_jja_2024.tif (COG EPSG:25831, °C, fill=NaN,
+# composite already built). io_thermal.lst_zonal_mean_per_hex with nodata=NaN +
+# the 25831 hex POLYGONS. uhi_delta_c = lst - rural baseline (global 0.25 qtile).
+# UHI PENALTY in scoring (max(0,uhi)*uhi_per_degree).
+print("LST summer median -> UHI delta (zonal mean per H3 cell, EPSG:25831) ...")
+from catmob.io_thermal import lst_zonal_mean_per_hex  # noqa: E402
+
+LST_RASTER = REPO / "data/bronze/thermal/lst_summer_jja_2024.tif"
+lst_per_hex = lst_zonal_mean_per_hex(LST_RASTER, hex_polys_m)  # 25831 polys
+hexes["lst_summer_median_c"] = hexes["h3_id"].map(lst_per_hex.set_index("h3_id")["lst_summer_median_c"])
+hexes["uhi_delta_c"] = hexes["h3_id"].map(lst_per_hex.set_index("h3_id")["uhi_delta_c"])
+n_lst = int(hexes["lst_summer_median_c"].notna().sum())
+print(f"  lst: {n_lst:,}/{len(hexes):,} hexes "
+      f"(median {np.nanmedian(hexes['lst_summer_median_c']):.1f} C, "
+      f"uhi median {np.nanmedian(hexes['uhi_delta_c']):.1f} C, "
+      f"uhi max {np.nanmax(hexes['uhi_delta_c']):.1f} C)")
+pd.DataFrame({
+    "h3_id": hexes["h3_id"].apply(_to_hex_str),
+    "lst_summer_median_c": hexes["lst_summer_median_c"].values,
+    "uhi_delta_c": hexes["uhi_delta_c"].values,
+}).to_parquet(SILVER / "lst_per_hex.parquet", index=False)
+
+# 4m. trains_per_day_nearest + trains_to_bcn_nearest — GTFS nearest-stop join --
+# data/bronze/gtfs/{rodalies,fgc}/. io_gtfs.load_combined (3 fixes: col-strip,
+# national-bbox prefilter, FGC calendar_dates fallback) -> stops + per-stop freq.
+# sjoin_nearest hex centroid -> nearest stop, map trips_per_day (fillna 12) and
+# trips_to_bcn_core (fillna 0). Both feed trains_to_bcn_per_30 weight.
+print("GTFS frequency (load_combined -> nearest-stop trips/day + trips->BCN) ...")
+from catmob import io_gtfs  # noqa: E402
+
+g = io_gtfs.load_combined(REPO / "data/bronze/gtfs/rodalies", REPO / "data/bronze/gtfs/fgc")
+stops_m = gpd.GeoDataFrame(
+    g["stops"], geometry=gpd.points_from_xy(g["stops"]["lon"], g["stops"]["lat"]),
+    crs="EPSG:4326").to_crs(epsg=25831)[["stop_id", "geometry"]].reset_index(drop=True)
+nn_stop = gpd.sjoin_nearest(hex_m, stops_m, how="left", distance_col="_d")
+nn_stop = nn_stop.sort_values("_d").drop_duplicates("h3_id")
+nearest_stop_id = hexes["h3_id"].map(nn_stop.set_index("h3_id")["stop_id"])
+freq_idx = g["freq"].set_index("stop_id")
+hexes["trains_per_day_nearest"] = (
+    nearest_stop_id.map(freq_idx["trips_per_day"]).fillna(12).astype(int)
+)
+hexes["trains_to_bcn_nearest"] = (
+    nearest_stop_id.map(freq_idx["trips_to_bcn_core"]).fillna(0).astype(int)
+)
+print(f"  gtfs: {len(g['stops']):,} stops / {len(g['freq']):,} with freq; "
+      f"trains_per_day median {int(hexes['trains_per_day_nearest'].median())}, "
+      f"trains_to_bcn median {int(hexes['trains_to_bcn_nearest'].median())}, "
+      f"max {int(hexes['trains_to_bcn_nearest'].max())}")
+pd.DataFrame({
+    "h3_id": hexes["h3_id"].apply(_to_hex_str),
+    "trains_per_day_nearest": hexes["trains_per_day_nearest"].values,
+    "trains_to_bcn_nearest": hexes["trains_to_bcn_nearest"].values,
+}).to_parquet(SILVER / "gtfs_frequency.parquet", index=False)
+
 # 5. MITMA disaggregation ---------------------------------------------------
 print("MITMA centroid -> distrito ...")
 cat_4326 = cat_zones[["ID", "geometry"]].rename(columns={"ID": "id"})
@@ -334,12 +440,6 @@ print(f"  motorway hexes: {int(hexes['motorway_within_500m'].sum()):,} / "
 
 # 7. Write ------------------------------------------------------------------
 out = hexes.drop(columns="geometry").copy()
-
-
-def _to_hex_str(c):
-    return c if isinstance(c, str) else h3.int_to_str(int(c))
-
-
 out["h3_id"] = out["h3_id"].apply(_to_hex_str)
 out_path = GOLD / "h3_res8_catalonia_v2.parquet"
 out.to_parquet(out_path, index=False)
