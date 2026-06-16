@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-"""SIDE export of the v2 gold liveability layer for visual preview.
+"""LIVE export of the v2.3 gold liveability layer for the public site.
 
-Non-destructive sibling of scripts/export_story_payload.py. Reads the v2 gold
-parquet (data/gold/h3_res8_catalonia_v2.parquet) and the v2 catmob.scoring
-(saturating closeness REWARDS), recomputes score_<preset> for all 4 presets,
-and writes docs/story_data_v2/{hexes,arcs,pois,manifest}.json in the SAME shape
-the geo-browser (docs/app/geobrowser-map.js) expects.
+Reads the v2 gold parquet (data/gold/h3_res8_catalonia_v2.parquet) and the v2
+catmob.scoring (saturating closeness REWARDS), recomputes score_<preset> for all
+4 presets, and writes docs/story_data/{hexes,arcs,pois,manifest}.json in the SAME
+shape the geo-browser (docs/app/geobrowser-map.js) expects. This is the canonical,
+live-facing data dir served by GitHub Pages — it OVERWRITES the old v1 payload.
 
-Does NOT touch docs/story_data/ or docs/explore.html. Arcs/POIs are pure
-geometry inputs (unchanged between v1 and v2) and are copied over from the v1
-deck HTML payload so the input layers still render.
+Arcs/POIs are pure geometry inputs (unchanged between v1 and v2) and are copied
+over from the v1 deck HTML payload so the input layers still render.
 
 Run with the sedona env python:
     /home/nls/miniforge3/envs/sedona/bin/python scripts/export_story_payload_v2.py
@@ -28,7 +27,7 @@ from catmob import scoring  # noqa: E402
 
 GOLD = REPO / "data" / "gold" / "h3_res8_catalonia_v2.parquet"
 HTML = REPO / "docs" / "catalonia_liveability.html"   # source of arcs/pois (geometry inputs)
-OUT = REPO / "docs" / "story_data_v2"
+OUT = REPO / "docs" / "story_data"
 PRESETS = ["default", "nature_first", "quiet_strict", "amenity_first"]
 
 # Columns the geo-browser visualises. v2 adds green_min_m / sea_min_m /

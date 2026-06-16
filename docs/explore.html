@@ -11,7 +11,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>mitma-sedona — Catalonia liveability geo-browser</title>
+  <title>mitma-sedona — Catalonia liveability</title>
   <meta name="description"
         content="Where could you live well in Catalonia? An H3 res-8 multi-criteria liveability index built with Apache Sedona on MITMA mobility, OSM amenities and environmental layers. A relative index and a starting question — not a guarantee.">
 
@@ -100,7 +100,16 @@
           <option value="mitma_inflow_daily">MITMA inflow (trips/day)</option>
           <option value="mitma_through_ratio">Through-ratio (sink ↔ source, diverging)</option>
           <option value="train_reach_min">Train reach (min, bike) · presence</option>
+          <option value="trains_to_bcn_nearest">Trains/day to BCN core (nearest stop)</option>
           <option value="climb_min_m">Climbing gym (min away) · presence</option>
+          <option value="tree_cover_pct">Tree-cover density (%, EEA TCD)</option>
+          <option value="natura2000_within_5km">Natura 2000 within 5 km</option>
+          <option value="biodiversity_obs_density">Biodiversity obs density (/km², iNat)</option>
+          <option value="no2_ugm3">NO₂ annual mean (µg/m³) · penalty</option>
+          <option value="pm25_ugm3">PM₂.₅ annual mean (µg/m³) · penalty</option>
+          <option value="uhi_delta_c">Urban-heat-island Δ (°C) · penalty</option>
+          <option value="viirs_radiance">Night-light radiance (VIIRS) · penalty</option>
+          <option value="eprtr_facility_min_m">E-PRTR facility (m away) · penalty</option>
           <option value="industry_density_per_km2">Industry density (/km²)</option>
           <option value="motorway_within_500m">Motorway within 500 m</option>
         </select>
@@ -308,8 +317,29 @@ const METRIC_CAPTIONS = {
     "1 = a source (people leave). Diverging ramp pivots at 1.0.",
   train_reach_min: "Bike-minutes to reach a train station. Only ~22% of the grid has a " +
     "station in range; the rest is grey — \"none within reach\".",
+  trains_to_bcn_nearest: "Trains/day at the nearest Rodalies/FGC stop that reach the " +
+    "Barcelona core (real GTFS, Wed service). Highest along the BCN trunk lines; " +
+    "0 where no nearby stop serves the core.",
   climb_min_m: "Minutes to the nearest climbing gym. ~37% coverage; most of Catalonia is " +
     "far from one, which is itself the finding.",
+  tree_cover_pct: "EEA tree-cover density 2018, zonal-mean % per hex (0–100). A nature " +
+    "reward; the forested NE reads high, urban cores and the sea-edge low.",
+  natura2000_within_5km: "Within 5 km of a terrestrial Natura 2000 protected site " +
+    "(marine SPAs clipped out). ~91% of land qualifies — a broad nature bonus.",
+  biodiversity_obs_density: "Research-grade iNaturalist observations per km² (GBIF, " +
+    "2018–24). A nature reward scored log-scaled to absorb citizen-science " +
+    "clustering — bright around trails and towns; the documented sampling bias.",
+  uhi_delta_c: "Urban-heat-island Δ: summer-median land-surface temperature minus the " +
+    "rural baseline (Landsat JJA 2024). A penalty above the baseline; hot inland " +
+    "cities and bare ground read high, forest and coast cooler.",
+  viirs_radiance: "VIIRS night-time-light radiance, zonal-mean per hex (2024). A light-" +
+    "pollution penalty tiebreaker — dark rural hexes near 0, the BCN core brightest.",
+  no2_ugm3: "Nearest-station annual NO₂ (µg/m³, XVPCA 2024). A penalty above the WHO-2021 " +
+    "20 µg/m³ guideline; ~41% of hexes within a station's 15 km reach, rest grey.",
+  pm25_ugm3: "Nearest-station annual PM₂.₅ (µg/m³, XVPCA 2024). A penalty above the " +
+    "WHO-2021 5 µg/m³ guideline; sparse network (~20% coverage), rest grey.",
+  eprtr_facility_min_m: "Metres to the nearest E-PRTR industrial-emission facility " +
+    "(cap 50 km). A penalty — closer = worse; brighter (nearer) = heavier.",
   industry_density_per_km2: "Industrial land density — a penalty input. 100% coverage; " +
     "denser = a heavier penalty on the score.",
   motorway_within_500m: "Whether a motorway runs within 500 m (a noise-penalty cue). " +
