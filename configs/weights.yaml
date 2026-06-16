@@ -32,16 +32,31 @@ default:
   # strong positive; max +6 at a park on the doorstep, 0 at >=10 km.
   green_reward: 6.0
   sea_within_3km_bonus: 6.0           # flat positive bonus when sea_min_m < 3 km (unchanged)
+  # tree_cover_pct (v2.1 wired): nature REWARD. score += tree_cover_pct * w.
+  # Source EEA Tree-Cover-Density 2018 raster, zonal-mean % per H3 cell
+  # (nodata=255). +0.15/% -> a fully-forested hex (100%) adds +15. Coverage 100%.
   tree_cover_pct: 0.15
+  # natura2000_within_5km (v2.1 wired): boolean nature BONUS. score += w if the
+  # hex polygon is within 5 km of a TERRESTRIAL Natura 2000 site (marine SPAs
+  # land-clipped out). EEA SITECODE/SITENAME/SITETYPE source, 231 sites. ~91% true.
   natura2000_within_5km: 5.0
-  biodiversity_obs_log: 1.0
-  # Environmental health (genuine penalties — unchanged)
+  biodiversity_obs_log: 1.0           # GBIF not landed this wave -> column NULL -> w*0
+  # Environmental health (genuine penalties).
+  # no2_ugm3 (v2.1 wired): nearest XVPCA-station annual mean (µg/m³, 2024 hourly
+  # melted to annual). PENALTY above WHO-2021 annual guideline (20 µg/m³):
+  # score += max(0, no2_ugm3 - 20) * w. ~41% of hexes within a station's 15 km.
   no2_above_who_per_ugm3: -0.5
+  # pm25_ugm3 (v2.1 wired): nearest XVPCA-station annual mean (µg/m³). PENALTY
+  # above WHO-2021 annual guideline (5 µg/m³): max(0, pm25_ugm3 - 5) * w.
+  # Sparse net (14 PM2.5 stations) -> ~20% coverage; NULL elsewhere -> neutral.
   pm25_above_who_per_ugm3: -1.2
   uhi_per_degree: -2.0
   viirs_radiance: -0.05
-  # Penalties (genuine harms — unchanged)
+  # Penalties (genuine harms).
   industry_density: -6.0
+  # eprtr_inverse_dist (v2.1 wired): nearest E-PRTR facility distance PENALTY,
+  # closer = worse. score += (1 / eprtr_facility_min_m) * w  (cap 50 km, dedup'd
+  # to one point/facility). 107 Catalonia facilities; ~98% of hexes within 50 km.
   eprtr_inverse_dist: -0.001
   motorway_within_500m: -12.0
   # Health amenities — v2 closeness REWARD (was hospital_per_400m/-1.0).

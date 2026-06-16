@@ -175,6 +175,126 @@ n = int((hexes["pharmacy_density_per_km2"] > 0).sum())
 print(f"  pharmacy: {len(pharm):,} nodes / {n:,} hexes with >=1 within 1 km "
       f"(max {hexes['pharmacy_density_per_km2'].max():.1f}/km2)")
 
+# === v2.1 NEXT-WAVE ENRICHMENT (tree cover / Natura 2000 / E-PRTR / air) ====
+# All distance/zonal math runs in EPSG:25831 metres; closeness_reward for
+# benefits, saturating penalties for harms, NULL = neutral (scoring.py).
+#
+# Build H3 cell-BOUNDARY POLYGONS once (NOT the centroids in
+# silver/hex_centroids.parquet). Reused for: tree_cover_pct (rasterstats zonal
+# mean, honor nodata=255) and natura2000_within_5km (reproject -> union ->
+# buffer(5000).intersects). cell_to_boundary returns (lat, lon) pairs.
+print("Building H3 cell-boundary polygons (for zonal/buffer features) ...")
+from shapely.geometry import Polygon  # noqa: E402
+
+# hexes["h3_id"] holds int cell IDs at this point (string conversion happens
+# only at write time in section 7); h3.cell_to_boundary accepts the int form.
+hex_poly_geom = [
+    Polygon([(lon, lat) for lat, lon in h3.cell_to_boundary(c)])
+    for c in hexes["h3_id"]
+]
+hex_polys = gpd.GeoDataFrame(
+    {"h3_id": hexes["h3_id"].values}, geometry=hex_poly_geom, crs="EPSG:4326")
+hex_polys_m = hex_polys.to_crs(epsg=25831)
+
+# 4f. tree_cover_pct — zonal mean of the EEA TCD raster per H3 cell ----------
+# Raster: data/bronze/treecover/tcd_2018_catalonia.tif (EPSG:4326, U8 0-100,
+# nodata=255 ~ sea/outside). Positive nature reward (weight tree_cover_pct).
+print("Tree cover (zonal mean per H3 cell, nodata=255) ...")
+from rasterstats import zonal_stats  # noqa: E402
+
+TCD_RASTER = REPO / "data/bronze/treecover/tcd_2018_catalonia.tif"
+# rasterstats needs the polygons in the raster CRS (EPSG:4326).
+tc_stats = zonal_stats(hex_polys, str(TCD_RASTER), stats=["mean"], nodata=255, all_touched=False)
+hexes["tree_cover_pct"] = [s["mean"] for s in tc_stats]
+n_tc = int(hexes["tree_cover_pct"].notna().sum())
+print(f"  tree_cover: {n_tc:,}/{len(hexes):,} hexes with a value "
+      f"(median {np.nanmedian(hexes['tree_cover_pct']):.1f}%, "
+      f"max {np.nanmax(hexes['tree_cover_pct']):.1f}%)")
+
+# 4g. natura2000_within_5km — hex within 5 km of a Natura 2000 site ----------
+# data/bronze/natura2000/natura2000_catalonia.parquet (231 sites, WGS84,
+# EEA cols SITECODE/SITENAME/SITETYPE — NOT WDPA; no filter_wdpa helper).
+# Boolean positive nature bonus (weight natura2000_within_5km).
+# LAND-CLIP: the raw set includes huge MARINE SPAs (e.g. ES0000512 Delta de
+# l'Ebre marine, 9017 km2) that inflate the union to ~97% of Catalonia. Clip to
+# the Catalonia land union (cat_zones) so the flag means "near a TERRESTRIAL
+# protected area" (clipped union 9762 km2 ~ 30% of land, the real figure).
+print("Natura 2000 within 5 km (land-clipped; buffer(5000).intersects union) ...")
+land_union = cat_zones.to_crs(epsg=25831).geometry.union_all()
+n2k_raw = gpd.read_parquet(REPO / "data/bronze/natura2000/natura2000_catalonia.parquet").to_crs(epsg=25831)
+n2k_clipped = n2k_raw.geometry.intersection(land_union)
+n2k_clipped = n2k_clipped[~n2k_clipped.is_empty]
+n2k_union = n2k_clipped.union_all()
+print(f"  natura land-clipped union: {n2k_union.area/1e6:.0f} km2 "
+      f"({n2k_union.area/land_union.area:.1%} of land; raw {n2k_raw.geometry.union_all().area/1e6:.0f} km2 incl. marine)")
+# Buffer each hex polygon by 5 km and test intersection with the protected union.
+hexes["natura2000_within_5km"] = hex_polys_m.geometry.buffer(5000).intersects(n2k_union).values
+n_n2k = int(hexes["natura2000_within_5km"].sum())
+print(f"  natura2000: {len(n2k_raw):,} sites / {n_n2k:,}/{len(hexes):,} hexes within 5 km "
+      f"({n_n2k/len(hexes):.1%})")
+
+# 4h. eprtr_facility_min_m — nearest E-PRTR facility distance (PENALTY) ------
+# data/bronze/pollution/eprtr/spain.csv -> parse_eprtr_facilities (clips to
+# Catalonia bbox, renames Longitude/Latitude). Multi-pollutant rows -> dedup to
+# one point per facility_id. Nearest distance, cap 50 km. closer = worse
+# (scoring: (1/dist)*eprtr_inverse_dist, negative weight).
+print("E-PRTR nearest-facility distance (cap 50 km; PENALTY) ...")
+from catmob.io_pollution import parse_eprtr_facilities  # noqa: E402
+
+EPRTR_CAP_M = 50_000.0
+fac = parse_eprtr_facilities(REPO / "data/bronze/pollution/eprtr/spain.csv")
+fac = fac.drop_duplicates("facility_id").reset_index(drop=True)  # one point per facility
+fac_gdf = gpd.GeoDataFrame(
+    fac, geometry=gpd.points_from_xy(fac["lon"], fac["lat"]), crs="EPSG:4326"
+).to_crs(epsg=25831)
+nearest = gpd.sjoin_nearest(
+    hex_m, fac_gdf[["geometry"]].reset_index(drop=True),
+    how="left", distance_col="_dist", max_distance=EPRTR_CAP_M)
+hexes["eprtr_facility_min_m"] = hexes["h3_id"].map(nearest.groupby("h3_id")["_dist"].min())
+n_ep = int(hexes["eprtr_facility_min_m"].notna().sum())
+print(f"  eprtr: {len(fac_gdf):,} facilities / {n_ep:,}/{len(hexes):,} hexes within 50 km "
+      f"(median {np.nanmedian(hexes['eprtr_facility_min_m']):.0f} m)")
+
+# 4i. no2_ugm3 (+ pm25_ugm3) — XVPCA nearest-station annual mean (PENALTY) ----
+# data/bronze/air/xvpca/xvpca_hourly_2024.csv is HOURLY long-form (h01..h24,
+# codi_eoi/latitud/longitud). Melt -> per-station+contaminant annual mean, then
+# nearest-station join (NO2 steep-gradient/traffic). Penalty above WHO 2021
+# annual thresholds applied in scoring.py (NO2 20, PM2.5 5 ug/m3).
+print("Air quality (XVPCA hourly -> annual station mean -> nearest join) ...")
+AIR_JOIN_CAP_M = 15_000.0  # nearest-station catchment (dense ~140-station net)
+air = pd.read_csv(REPO / "data/bronze/air/xvpca/xvpca_hourly_2024.csv")
+hour_cols = [c for c in air.columns if c.lower().startswith("h") and c[1:].isdigit()]
+# Long-melt the 24 hourly readings, then station+contaminant annual mean.
+air_long = air.melt(
+    id_vars=["codi_eoi", "latitud", "longitud", "contaminant"],
+    value_vars=hour_cols, value_name="val").dropna(subset=["val"])
+air_long["val"] = pd.to_numeric(air_long["val"], errors="coerce")
+station_mean = (air_long.dropna(subset=["val"])
+                .groupby(["codi_eoi", "latitud", "longitud", "contaminant"])["val"]
+                .mean().reset_index())
+
+
+def _join_pollutant(contaminant: str, out_col: str) -> None:
+    sub = station_mean[station_mean["contaminant"] == contaminant].copy()
+    if sub.empty:
+        hexes[out_col] = np.nan
+        print(f"  {out_col:>10}: 0 stations (NaN)")
+        return
+    st = gpd.GeoDataFrame(
+        sub, geometry=gpd.points_from_xy(sub["longitud"], sub["latitud"]), crs="EPSG:4326"
+    ).to_crs(epsg=25831)[["val", "geometry"]].reset_index(drop=True)
+    nn = gpd.sjoin_nearest(hex_m, st, how="left", distance_col="_d", max_distance=AIR_JOIN_CAP_M)
+    # one station per hex (nearest); first() after the groupby min-distance order
+    nn = nn.sort_values("_d").drop_duplicates("h3_id")
+    hexes[out_col] = hexes["h3_id"].map(nn.set_index("h3_id")["val"])
+    n = int(hexes[out_col].notna().sum())
+    print(f"  {out_col:>10}: {len(st):,} stations / {n:,}/{len(hexes):,} hexes "
+          f"(median {np.nanmedian(hexes[out_col]):.1f} ug/m3)")
+
+
+_join_pollutant("NO2", "no2_ugm3")
+_join_pollutant("PM2.5", "pm25_ugm3")
+
 # 5. MITMA disaggregation ---------------------------------------------------
 print("MITMA centroid -> distrito ...")
 cat_4326 = cat_zones[["ID", "geometry"]].rename(columns={"ID": "id"})

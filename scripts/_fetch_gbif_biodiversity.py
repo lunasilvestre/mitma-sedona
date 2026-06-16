@@ -30,8 +30,12 @@ GEOMETRY_WKT = (
     f"{LON_MAX} {LAT_MAX}, {LON_MIN} {LAT_MAX}, {LON_MIN} {LAT_MIN}))"
 )
 
-MAX_RECORDS = 50_000
-PAGE_SIZE = 300  # GBIF search hard caps offset+limit at 100_000
+MAX_RECORDS = 15_000  # representative density sample; GBIF deep pages are slow
+PAGE_SIZE = 300       # GBIF search hard caps offset+limit at 100_000
+
+
+def _log(msg: str) -> None:
+    print(msg, flush=True)
 
 
 def fetch() -> pd.DataFrame:
@@ -68,7 +72,7 @@ def fetch() -> pd.DataFrame:
                 continue
             rows.append({
                 "observation_id": str(rec.get("key")),
-                "source": "gbif_inaturalist",
+                "source": "gbif",  # matches BIODIVERSITY_OBSERVATION_SCHEMA isin check
                 "lon": float(lon),
                 "lat": float(lat),
                 "year": int(rec.get("year") or 0),
@@ -79,10 +83,11 @@ def fetch() -> pd.DataFrame:
             })
             if len(rows) >= MAX_RECORDS:
                 break
+        _log(f"  page offset={base_params['offset']:>6}  kept={len(rows):>6}")
         if body.get("endOfRecords", True):
             break
         base_params["offset"] += PAGE_SIZE
-        time.sleep(0.15)
+        time.sleep(0.1)
     return pd.DataFrame(rows)
 
 

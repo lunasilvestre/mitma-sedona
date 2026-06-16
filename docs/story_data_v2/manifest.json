@@ -1,0 +1,84 @@
+{
+  "n_hexes": 45220,
+  "coverage": {
+    "h3_id": 1.0,
+    "lon_centroid": 1.0,
+    "lat_centroid": 1.0,
+    "train_reach_min": 0.2596,
+    "climb_min_m": 0.4864,
+    "yoga_min_m": 0.1458,
+    "hospital_min_m": 0.3049,
+    "green_min_m": 1.0,
+    "sea_min_m": 0.0645,
+    "pharmacy_density_per_km2": 1.0,
+    "tree_cover_pct": 1.0,
+    "natura2000_within_5km": 1.0,
+    "eprtr_facility_min_m": 0.9805,
+    "no2_ugm3": 0.4132,
+    "pm25_ugm3": 0.1996,
+    "mitma_inflow_daily": 1.0,
+    "mitma_outflow_daily": 1.0,
+    "mitma_through_ratio": 1.0,
+    "motorway_within_500m": 1.0,
+    "industry_density_per_km2": 1.0
+  },
+  "score_stats": {
+    "default": {
+      "min": 37.39,
+      "25%": 62.52,
+      "50%": 66.99,
+      "75%": 71.75,
+      "max": 97.97,
+      "mean": 67.56,
+      "std": 7.37
+    },
+    "nature_first": {
+      "min": 40.62,
+      "25%": 74.57,
+      "50%": 82.31,
+      "75%": 90.2,
+      "max": 100.0,
+      "mean": 82.23,
+      "std": 9.77
+    },
+    "quiet_strict": {
+      "min": 0.0,
+      "25%": 60.44,
+      "50%": 65.36,
+      "75%": 70.6,
+      "max": 97.47,
+      "mean": 63.35,
+      "std": 12.69
+    },
+    "amenity_first": {
+      "min": 35.68,
+      "25%": 61.16,
+      "50%": 66.14,
+      "75%": 71.56,
+      "max": 100.0,
+      "mean": 67.24,
+      "std": 8.52
+    }
+  },
+  "presets": [
+    "default",
+    "nature_first",
+    "quiet_strict",
+    "amenity_first"
+  ],
+  "arc_count": 5000,
+  "poi_categories": {
+    "climbing": 219,
+    "yoga": 67,
+    "hospital": 36
+  },
+  "source_initial_view": {
+    "longitude": 1.7,
+    "latitude": 41.6,
+    "zoom": 8.0,
+    "pitch": 45.0,
+    "bearing": 0
+  },
+  "source_basemap": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  "version": "v2"
+}
