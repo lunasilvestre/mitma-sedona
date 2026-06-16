@@ -128,68 +128,96 @@
     // OUTPUT — liveability score presets (resolved at runtime to score_<preset>)
     score: {
       column: 'score_default', ramp: 'viridis', label: 'Liveability score',
-      kind: 'score', unit: '', lowLabel: 'low', highLabel: 'high'
+      kind: 'score', goodWhen: 'high', unit: '', lowLabel: 'low', highLabel: 'high'
     },
     // ANALYTIC dimensions
     mitma_inflow_daily: {
       column: 'mitma_inflow_daily', ramp: 'magma', label: 'MITMA inflow (trips/day)',
-      kind: 'sequential', unit: ' trips/day', lowLabel: 'few', highLabel: 'many'
+      kind: 'sequential', goodWhen: 'neutral', unit: ' trips/day', lowLabel: 'few', highLabel: 'many'
+    },
+    mitma_outflow_daily: {
+      column: 'mitma_outflow_daily', ramp: 'magma', label: 'MITMA outflow (trips/day)',
+      kind: 'sequential', goodWhen: 'neutral', unit: ' trips/day', lowLabel: 'few', highLabel: 'many'
     },
     mitma_through_ratio: {
       column: 'mitma_through_ratio', ramp: 'RdBu', label: 'Through-ratio (sink ↔ source)',
-      kind: 'diverging', pivot: 1.0, unit: '', lowLabel: 'sink', highLabel: 'source'
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'sink', highLabel: 'source'
     },
     train_reach_min: {
       column: 'train_reach_min', ramp: 'viridis', label: 'Train reach (min, bike)',
-      kind: 'presence', invert: true, unit: ' min', lowLabel: 'near', highLabel: 'far'
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    trains_per_day_nearest: {
+      column: 'trains_per_day_nearest', ramp: 'magma', label: 'Trains/day at nearest station',
+      kind: 'sequential', goodWhen: 'high', unit: ' trips/day', lowLabel: 'none', highLabel: 'frequent'
     },
     trains_to_bcn_nearest: {
       column: 'trains_to_bcn_nearest', ramp: 'magma', label: 'Trains/day to BCN core',
-      kind: 'sequential', unit: ' trips/day', lowLabel: 'none', highLabel: 'frequent'
+      kind: 'sequential', goodWhen: 'high', unit: ' trips/day', lowLabel: 'none', highLabel: 'frequent'
     },
     climb_min_m: {
       column: 'climb_min_m', ramp: 'viridis', label: 'Climbing gym (min away)',
-      kind: 'presence', invert: true, unit: ' min', lowLabel: 'near', highLabel: 'far'
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    yoga_min_m: {
+      column: 'yoga_min_m', ramp: 'viridis', label: 'Yoga studio (min away)',
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    hospital_min_m: {
+      column: 'hospital_min_m', ramp: 'viridis', label: 'Hospital (min away)',
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    green_min_m: {
+      column: 'green_min_m', ramp: 'viridis', label: 'Green space (min away)',
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    sea_min_m: {
+      column: 'sea_min_m', ramp: 'viridis', label: 'Sea / coast (min away)',
+      kind: 'presence', goodWhen: 'low', unit: ' min', lowLabel: 'near', highLabel: 'far'
+    },
+    pharmacy_density_per_km2: {
+      column: 'pharmacy_density_per_km2', ramp: 'viridis', label: 'Pharmacy density (/km²)',
+      kind: 'sequential', goodWhen: 'high', unit: ' /km²', lowLabel: 'none', highLabel: 'dense'
     },
     tree_cover_pct: {
       column: 'tree_cover_pct', ramp: 'viridis', label: 'Tree-cover density (%)',
-      kind: 'sequential', unit: ' %', lowLabel: 'bare', highLabel: 'forested'
+      kind: 'sequential', goodWhen: 'high', unit: ' %', lowLabel: 'bare', highLabel: 'forested'
     },
     natura2000_within_5km: {
       column: 'natura2000_within_5km', ramp: 'viridis', label: 'Natura 2000 within 5 km',
-      kind: 'boolean', unit: '', lowLabel: 'no', highLabel: 'yes'
+      kind: 'boolean', goodWhen: 'high', unit: '', lowLabel: 'no', highLabel: 'yes'
     },
     biodiversity_obs_density: {
       column: 'biodiversity_obs_density', ramp: 'viridis', label: 'Biodiversity obs density (/km²)',
-      kind: 'sequential', unit: ' /km²', lowLabel: 'few', highLabel: 'many'
+      kind: 'sequential', goodWhen: 'high', unit: ' /km²', lowLabel: 'few', highLabel: 'many'
     },
     no2_ugm3: {
       column: 'no2_ugm3', ramp: 'magma', label: 'NO₂ annual mean (µg/m³)',
-      kind: 'sequential', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
+      kind: 'sequential', goodWhen: 'low', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
     },
     pm25_ugm3: {
       column: 'pm25_ugm3', ramp: 'magma', label: 'PM₂.₅ annual mean (µg/m³)',
-      kind: 'sequential', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
+      kind: 'sequential', goodWhen: 'low', unit: ' µg/m³', lowLabel: 'clean', highLabel: 'polluted'
     },
     uhi_delta_c: {
       column: 'uhi_delta_c', ramp: 'magma', label: 'Urban-heat-island Δ (°C)',
-      kind: 'diverging', pivot: 0.0, unit: ' °C', lowLabel: 'cooler', highLabel: 'hotter'
+      kind: 'diverging', goodWhen: 'low', pivot: 0.0, unit: ' °C', lowLabel: 'cooler', highLabel: 'hotter'
     },
     viirs_radiance: {
       column: 'viirs_radiance', ramp: 'magma', label: 'Night-light radiance (VIIRS)',
-      kind: 'sequential', unit: '', lowLabel: 'dark', highLabel: 'bright'
+      kind: 'sequential', goodWhen: 'low', unit: '', lowLabel: 'dark', highLabel: 'bright'
     },
     eprtr_facility_min_m: {
       column: 'eprtr_facility_min_m', ramp: 'magma', label: 'E-PRTR facility (m away)',
-      kind: 'presence', invert: true, unit: ' m', lowLabel: 'near', highLabel: 'far'
+      kind: 'presence', goodWhen: 'high', unit: ' m', lowLabel: 'near', highLabel: 'far'
     },
     industry_density_per_km2: {
       column: 'industry_density_per_km2', ramp: 'magma', label: 'Industry density (/km²)',
-      kind: 'sequential', unit: ' /km²', lowLabel: 'none', highLabel: 'dense'
+      kind: 'sequential', goodWhen: 'low', unit: ' /km²', lowLabel: 'none', highLabel: 'dense'
     },
     motorway_within_500m: {
       column: 'motorway_within_500m', ramp: 'magma', label: 'Motorway within 500 m',
-      kind: 'boolean', unit: '', lowLabel: 'no', highLabel: 'yes'
+      kind: 'boolean', goodWhen: 'low', unit: '', lowLabel: 'no', highLabel: 'yes'
     }
   };
 
@@ -405,17 +433,27 @@
   };
 
   // Normalise a raw value to [0,1] given the field's ramp semantics.
+  // POLARITY: brighter / high end of the ramp always means MORE LIVEABLE.
+  // When goodWhen === 'low' (penalty/cost metrics: pollution, heat, minutes-away,
+  // industry, night-light) we invert the normalised t so the GOOD low values land
+  // at the bright end. boolean true is always the "good" state per its goodWhen.
   GeoBrowser.prototype._normalise = function (field, v, dom) {
-    if (field.kind === 'boolean') { return v ? 1 : 0; }
+    var lowGood = field.goodWhen === 'low';
+    if (field.kind === 'boolean') {
+      var b = v ? 1 : 0;
+      return lowGood ? 1 - b : b;
+    }
+    var t;
     if (field.kind === 'diverging') {
       // Map pivot -> 0.5; spread by the larger half-range so the ramp is honest.
       var pivot = field.pivot != null ? field.pivot : 0;
       var half = Math.max(pivot - dom[0], dom[1] - pivot) || 1;
-      return clamp01(0.5 + (v - pivot) / (2 * half));
+      t = clamp01(0.5 + (v - pivot) / (2 * half));
+    } else {
+      var lo = dom[0], span = (dom[1] - dom[0]) || 1;
+      t = clamp01((v - lo) / span);
     }
-    var lo = dom[0], span = (dom[1] - dom[0]) || 1;
-    var t = clamp01((v - lo) / span);
-    return field.invert ? 1 - t : t; // presence fields: near=good=bright
+    return lowGood ? 1 - t : t; // low-is-good metrics: invert so good = bright
   };
 
   // ---- Render all active layers ---------------------------------------------
@@ -599,8 +637,8 @@
     var loVal, hiVal;
     if (field.kind === 'diverging') {
       loVal = formatNum(dom[0]); hiVal = formatNum(dom[1]);
-    } else if (field.invert) {
-      // presence: bright end = near (low minutes)
+    } else if (field.goodWhen === 'low') {
+      // low-is-good: bright (high) end of the ramp = the good low raw value
       loVal = formatNum(dom[1]) + esc(field.unit); hiVal = formatNum(dom[0]) + esc(field.unit);
     } else {
       loVal = formatNum(dom[0]) + esc(field.unit); hiVal = formatNum(dom[1]) + esc(field.unit);

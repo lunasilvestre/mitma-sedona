@@ -312,38 +312,56 @@ const METRIC_CAPTIONS = {
     "Diverging fields pivot at their natural midpoint; presence fields treat \"no data\" " +
     "as a distinct grey state, not zero.",
   mitma_inflow_daily: "Daily trips arriving in each hex (MITMA v2). 100% coverage — the " +
-    "strong opener; brighter = busier destination.",
+    "strong opener. Descriptive (neutral), not a liveability axis; brighter = busier destination.",
+  mitma_outflow_daily: "Daily trips departing each hex (MITMA v2). Descriptive (neutral), " +
+    "not a liveability axis; brighter = busier origin.",
   mitma_through_ratio: "Outflow ÷ inflow. Below 1 = a sink (people arrive and stay); above " +
-    "1 = a source (people leave). Diverging ramp pivots at 1.0.",
+    "1 = a source (people leave). Descriptive (neutral) — diverging ramp pivots at 1.0.",
   train_reach_min: "Bike-minutes to reach a train station. Only ~22% of the grid has a " +
-    "station in range; the rest is grey — \"none within reach\".",
+    "station in range; the rest is grey — \"none within reach\". Brighter = closer = better.",
+  trains_per_day_nearest: "Trains/day at the nearest station. More frequent service is " +
+    "better; brighter = more trains/day = better. Grey where no station is in reach.",
   trains_to_bcn_nearest: "Trains/day at the nearest Rodalies/FGC stop that reach the " +
-    "Barcelona core (real GTFS, Wed service). Highest along the BCN trunk lines; " +
+    "Barcelona core (real GTFS, Wed service). Brighter = more trains to BCN = better; " +
     "0 where no nearby stop serves the core.",
   climb_min_m: "Minutes to the nearest climbing gym. ~37% coverage; most of Catalonia is " +
-    "far from one, which is itself the finding.",
+    "far from one, which is itself the finding. Brighter = closer = better.",
+  yoga_min_m: "Minutes to the nearest yoga studio. Brighter = closer = better; grey where " +
+    "none is within reach.",
+  hospital_min_m: "Minutes to the nearest hospital. Brighter = closer = better; grey where " +
+    "none is within reach.",
+  green_min_m: "Minutes to the nearest green space. Brighter = closer = better; grey where " +
+    "none is within reach.",
+  sea_min_m: "Minutes to the nearest sea / coast. Brighter = closer = better; grey where " +
+    "none is within reach.",
+  pharmacy_density_per_km2: "Pharmacy density per km². More access is better; brighter = " +
+    "denser pharmacy access = better.",
   tree_cover_pct: "EEA tree-cover density 2018, zonal-mean % per hex (0–100). A nature " +
-    "reward; the forested NE reads high, urban cores and the sea-edge low.",
+    "reward; brighter = more tree cover = better — the forested NE reads bright, urban " +
+    "cores and the sea-edge dark.",
   natura2000_within_5km: "Within 5 km of a terrestrial Natura 2000 protected site " +
-    "(marine SPAs clipped out). ~91% of land qualifies — a broad nature bonus.",
+    "(marine SPAs clipped out). ~91% of land qualifies — brighter = protected nearby = better.",
   biodiversity_obs_density: "Research-grade iNaturalist observations per km² (GBIF, " +
     "2018–24). A nature reward scored log-scaled to absorb citizen-science " +
-    "clustering — bright around trails and towns; the documented sampling bias.",
+    "clustering; brighter = richer biodiversity record = better (note the sampling bias).",
   uhi_delta_c: "Urban-heat-island Δ: summer-median land-surface temperature minus the " +
-    "rural baseline (Landsat JJA 2024). A penalty above the baseline; hot inland " +
-    "cities and bare ground read high, forest and coast cooler.",
+    "rural baseline (Landsat JJA 2024). A penalty above the baseline; brighter = cooler = " +
+    "better — forest and coast read bright, hot inland cities and bare ground dark.",
   viirs_radiance: "VIIRS night-time-light radiance, zonal-mean per hex (2024). A light-" +
-    "pollution penalty tiebreaker — dark rural hexes near 0, the BCN core brightest.",
+    "pollution penalty; brighter = darker sky = better — dark rural hexes bright, the BCN core dark.",
   no2_ugm3: "Nearest-station annual NO₂ (µg/m³, XVPCA 2024). A penalty above the WHO-2021 " +
-    "20 µg/m³ guideline; ~41% of hexes within a station's 15 km reach, rest grey.",
+    "20 µg/m³ guideline; brighter = cleaner air = better. ~41% of hexes within a station's " +
+    "15 km reach, rest grey.",
   pm25_ugm3: "Nearest-station annual PM₂.₅ (µg/m³, XVPCA 2024). A penalty above the " +
-    "WHO-2021 5 µg/m³ guideline; sparse network (~20% coverage), rest grey.",
+    "WHO-2021 5 µg/m³ guideline; brighter = cleaner air = better. Sparse network " +
+    "(~20% coverage), rest grey.",
   eprtr_facility_min_m: "Metres to the nearest E-PRTR industrial-emission facility " +
-    "(cap 50 km). A penalty — closer = worse; brighter (nearer) = heavier.",
+    "(cap 50 km). Brighter = farther from industry = better; the closest, most-exposed " +
+    "hexes read dark.",
   industry_density_per_km2: "Industrial land density — a penalty input. 100% coverage; " +
-    "denser = a heavier penalty on the score.",
+    "brighter = less industry nearby = better.",
   motorway_within_500m: "Whether a motorway runs within 500 m (a noise-penalty cue). " +
-    "Binary; yellow = yes."
+    "Binary; brighter = no motorway nearby = better."
 };
 
 function renderLegend(info) {
