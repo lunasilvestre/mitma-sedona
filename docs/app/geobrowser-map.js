@@ -55,7 +55,6 @@
   // setStyle() never disturbs it — the hexes stay on top by construction.
   var ESRI_ATTRIB =
     'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community';
-  var OSM_ATTRIB = '&copy; OpenStreetMap contributors';
   function esriRasterStyle() {
     return {
       version: 8,
@@ -69,34 +68,29 @@
       layers: [{ id: 'esri-satellite', type: 'raster', source: 'esri-satellite' }]
     };
   }
-  function osmRasterStyle() {
-    return {
-      version: 8,
-      sources: {
-        'osm-raster': {
-          type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256, maxzoom: 19, attribution: OSM_ATTRIB
-        }
-      },
-      layers: [{ id: 'osm-raster', type: 'raster', source: 'osm-raster' }]
-    };
-  }
+  // Compliant fallback for the OSM basemap. We deliberately do NOT hotlink the
+  // public OSM raster tile servers: OSM's tile-usage policy forbids it and
+  // returns 403 "Access blocked / Referer required" for cross-origin requests.
+  // CARTO Voyager is a keyless, policy-compliant OSM-standard coloured GL style.
+  var CARTO_VOYAGER = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+  var CARTO_ATTRIB = '&copy; OpenStreetMap contributors &copy; CARTO';
   var BASEMAPS = {
     satellite: { label: 'Satellite', style: esriRasterStyle, attribution: ESRI_ATTRIB },
     dark: {
       label: 'Dark', style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      attribution: CARTO_ATTRIB
     },
     light: {
       label: 'Light', style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      attribution: CARTO_ATTRIB
     },
     osm: {
       label: 'OSM', style: 'https://tiles.openfreemap.org/styles/bright',
-      // OpenFreeMap Bright (vector); falls back to OSM raster tiles on failure.
+      // OpenFreeMap Bright (vector); falls back to CARTO Voyager (keyless,
+      // OSM-standard, policy-compliant) if OpenFreeMap is unreachable. Never
+      // raw public OSM raster tiles (those 403 on hotlink).
       attribution: '&copy; OpenStreetMap contributors &copy; OpenFreeMap',
-      fallbackStyle: osmRasterStyle, fallbackAttribution: OSM_ATTRIB
+      fallbackStyle: CARTO_VOYAGER, fallbackAttribution: CARTO_ATTRIB
     }
   };
 
@@ -247,7 +241,7 @@
       compact: true, customAttribution: bm.attribution
     });
     map.addControl(this._attribCtrl, 'bottom-right');
-    // OpenFreeMap (vector) can be unreachable; fall back to OSM raster tiles.
+    // OpenFreeMap (vector) can be unreachable; fall back to CARTO Voyager.
     map.on('error', function (e) {
       self._onBasemapError(e);
     });
@@ -255,13 +249,15 @@
   };
 
   // If the active basemap is OSM (OpenFreeMap vector) and its style/tiles fail,
-  // swap to the inline OSM raster fallback once. Other styles surface errors but
-  // are not auto-swapped (they degrade to a blank/partial basemap, not a crash).
+  // swap to the CARTO Voyager fallback once (keyless, OSM-standard, policy
+  // compliant — never raw public OSM raster tiles). Other styles surface errors
+  // but are not auto-swapped (they degrade to a partial basemap, not a crash).
   GeoBrowser.prototype._onBasemapError = function () {
     var bm = BASEMAPS[this._basemapKey];
     if (!bm || !bm.fallbackStyle || this._basemapFellBack) { return; }
     this._basemapFellBack = true;
-    this._applyStyle(bm.fallbackStyle(), bm.fallbackAttribution);
+    // fallbackStyle is a GL-JSON URL string (resolved by setStyle directly).
+    this._applyStyle(bm.fallbackStyle, bm.fallbackAttribution);
   };
 
   // Swap the MapLibre style in place, preserving the camera. The deck overlay is
