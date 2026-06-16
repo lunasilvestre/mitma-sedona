@@ -4,42 +4,59 @@
 # Each entry mirrors the constraint table in PLAN.md §2.
 # Weights are signed: positive = preference, negative = penalty.
 # All scores are computed in points and the final sum is clipped to [0, 100].
+#
+# ── v2 AMENITY ACCESS-REWARD REFORMULATION (branch feat/v2-scoring-wave1) ──
+# v1 FLAW: amenity *distance* carried a NEGATIVE weight (e.g. climb_per_200m
+# = -1.0 on min(dist,5000)/200). A hex with NO amenity scored 0 for that
+# term (NULL -> neutral), but a hex with a FAR-but-present amenity scored a
+# large NEGATIVE -> absence out-scored far-presence. Backwards.
+#
+# v2 FIX: amenity closeness is a SATURATING POSITIVE REWARD computed in
+# scoring.py as:   reward = W_pos * max(0, 1 - dist/10000)
+#   * full bonus W_pos at 0 m, linearly decaying to 0 at >= 10 km
+#   * NULL / absent -> 0 (neutral) — presence always >= absence, near > far.
+# The keys below now hold the POSITIVE max-bonus magnitude W_pos (points).
+# Distances are metres in EPSG:25831 (10 km catchment). Genuine harms stay
+# as penalties (motorway, industry, NO2/PM2.5/UHI, eprtr, viirs).
 
 default:
   # Mobility & accessibility
   train_reach_per_min_under25: 1.4
   trains_to_bcn_per_30: 1.0
-  # Lifestyle amenities
-  climb_per_200m: -1.0
-  yoga_per_250m: -1.0
+  # Lifestyle amenities — v2 closeness REWARD (was climb_per_200m/-1.0,
+  # yoga_per_250m/-1.0 distance penalties). Max bonus at 0 m, 0 at >=10 km.
+  climb_reward: 5.0
+  yoga_reward: 4.0
   # Nature
-  green_per_200m: -1.0
-  sea_within_3km_bonus: 6.0
+  # green_reward: v2 closeness REWARD (was green_per_200m/-1.0). Nature is a
+  # strong positive; max +6 at a park on the doorstep, 0 at >=10 km.
+  green_reward: 6.0
+  sea_within_3km_bonus: 6.0           # flat positive bonus when sea_min_m < 3 km (unchanged)
   tree_cover_pct: 0.15
   natura2000_within_5km: 5.0
   biodiversity_obs_log: 1.0
-  # Environmental health
+  # Environmental health (genuine penalties — unchanged)
   no2_above_who_per_ugm3: -0.5
   pm25_above_who_per_ugm3: -1.2
   uhi_per_degree: -2.0
   viirs_radiance: -0.05
-  # Penalties
+  # Penalties (genuine harms — unchanged)
   industry_density: -6.0
   eprtr_inverse_dist: -0.001
   motorway_within_500m: -12.0
-  # Health amenities
-  hospital_per_400m: -1.0
-  pharmacy_density_log: 1.0
+  # Health amenities — v2 closeness REWARD (was hospital_per_400m/-1.0).
+  hospital_reward: 5.0
+  pharmacy_density_log: 1.0           # log1p(density) positive — already correct
   # Mobility "vibe check" (off by default — set positive to penalise busy through-flow)
   mitma_through_ratio: 0.0
   # Score offset
   base_offset: 50.0
 
 nature_first:
-  # Halve lifestyle, double nature
-  climb_per_200m: -0.5
-  yoga_per_250m: -0.5
-  green_per_200m: -2.0
+  # Halve lifestyle, double nature (v2: doubled rewards, was doubled penalties)
+  climb_reward: 2.5
+  yoga_reward: 2.0
+  green_reward: 12.0
   sea_within_3km_bonus: 12.0
   tree_cover_pct: 0.30
   natura2000_within_5km: 10.0
@@ -57,9 +74,10 @@ quiet_strict:
 
 amenity_first:
   # Double lifestyle + health amenities, halve biodiversity
-  climb_per_200m: -2.0
-  yoga_per_250m: -2.0
-  hospital_per_400m: -2.0
+  # (v2: doubled rewards, was doubled distance penalties)
+  climb_reward: 10.0
+  yoga_reward: 8.0
+  hospital_reward: 10.0
   pharmacy_density_log: 2.0
   natura2000_within_5km: 2.5
   biodiversity_obs_log: 0.5

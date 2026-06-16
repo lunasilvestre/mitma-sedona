@@ -1,0 +1,63 @@
+{
+  "n_hexes": 45220,
+  "catchment_m": 10000,
+  "coverage": {
+    "h3_id": 1.0,
+    "lon_centroid": 1.0,
+    "lat_centroid": 1.0,
+    "train_reach_min": 0.4297,
+    "climb_min_m": 0.4864,
+    "yoga_min_m": 0.1458,
+    "hospital_min_m": 0.1427,
+    "mitma_inflow_daily": 1.0,
+    "mitma_outflow_daily": 1.0,
+    "mitma_through_ratio": 1.0,
+    "motorway_within_500m": 1.0,
+    "industry_density_per_km2": 1.0
+  },
+  "score_stats": {
+    "default": {
+      "min": 0.0,
+      "25%": 13.95,
+      "50%": 38.79,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 32.65,
+      "std": 19.77
+    },
+    "nature_first": {
+      "min": 0.0,
+      "25%": 31.12,
+      "50%": 45.04,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 40.03,
+      "std": 13.26
+    },
+    "quiet_strict": {
+      "min": 0.0,
+      "25%": 12.24,
+      "50%": 37.24,
+      "75%": 49.5,
+      "max": 63.52,
+      "mean": 31.47,
+      "std": 20.06
+    },
+    "amenity_first": {
+      "min": 0.0,
+      "25%": 0.0,
+      "50%": 28.44,
+      "75%": 50.0,
+      "max": 64.0,
+      "mean": 26.33,
+      "std": 23.88
+    }
+  },
+  "presets": [
+    "default",
+    "nature_first",
+    "quiet_strict",
+    "amenity_first"
+  ],
+  "note": "EXPLORATORY 10km catchment variant; arcs/pois copied from v1"
+}

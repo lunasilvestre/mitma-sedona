@@ -20,6 +20,23 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WEIGHTS_PATH = REPO_ROOT / "configs" / "weights.yaml"
 
+# v2 amenity catchment edge (metres): closeness reward decays to 0 here.
+CLOSENESS_CATCHMENT_M = 10_000.0
+
+
+def closeness_reward(dist_m: float | None, w_pos: float) -> float:
+    """Saturating positive access reward for a nearby amenity.
+
+    ``reward = w_pos * max(0, 1 - dist/10000)`` — full ``w_pos`` at 0 m,
+    decaying linearly to 0 at >= 10 km. NULL / absent -> 0 (neutral), so a
+    present-but-far amenity never scores below an absent one (v1 had this
+    backwards: distance carried a negative weight). ``w_pos`` is the
+    positive max-bonus magnitude from ``configs/weights.yaml``.
+    """
+    if dist_m is None or pd.isna(dist_m) or not w_pos:
+        return 0.0
+    return w_pos * max(0.0, 1.0 - float(dist_m) / CLOSENESS_CATCHMENT_M)
+
 
 def load_weights(preset: str = "default", path: Path | str | None = None) -> dict[str, float]:
     """Load a weight vector by preset name."""
@@ -50,15 +67,12 @@ def score_hex(row: Mapping[str, float], weights: Mapping[str, float]) -> float:
     if pd.notna(row.get("trains_to_bcn_nearest")):
         s += float(row["trains_to_bcn_nearest"]) / 30.0 * w.get("trains_to_bcn_per_30", 0)
 
-    # Lifestyle amenities (weights are negative coefficients on distance/200m)
-    if pd.notna(row.get("climb_min_m")):
-        s += min(float(row["climb_min_m"]), 5000.0) / 200.0 * w.get("climb_per_200m", 0)
-    if pd.notna(row.get("yoga_min_m")):
-        s += min(float(row["yoga_min_m"]), 5000.0) / 250.0 * w.get("yoga_per_250m", 0)
+    # Lifestyle amenities — v2 saturating closeness REWARD (positive).
+    s += closeness_reward(row.get("climb_min_m"), w.get("climb_reward", 0))
+    s += closeness_reward(row.get("yoga_min_m"), w.get("yoga_reward", 0))
 
     # Nature
-    if pd.notna(row.get("green_min_m")):
-        s += min(float(row["green_min_m"]), 4000.0) / 200.0 * w.get("green_per_200m", 0)
+    s += closeness_reward(row.get("green_min_m"), w.get("green_reward", 0))
     if pd.notna(row.get("sea_min_m")) and float(row["sea_min_m"]) < 3000.0:
         s += w.get("sea_within_3km_bonus", 0)
     if pd.notna(row.get("tree_cover_pct")):
@@ -86,9 +100,8 @@ def score_hex(row: Mapping[str, float], weights: Mapping[str, float]) -> float:
     if row.get("motorway_within_500m"):
         s += w.get("motorway_within_500m", 0)
 
-    # Health amenities
-    if pd.notna(row.get("hospital_min_m")):
-        s += min(float(row["hospital_min_m"]), 8000.0) / 400.0 * w.get("hospital_per_400m", 0)
+    # Health amenities — v2 saturating closeness REWARD (positive).
+    s += closeness_reward(row.get("hospital_min_m"), w.get("hospital_reward", 0))
     if pd.notna(row.get("pharmacy_density_per_km2")):
         s += np.log1p(float(row["pharmacy_density_per_km2"])) * w.get("pharmacy_density_log", 0)
 
