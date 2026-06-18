@@ -188,6 +188,19 @@ input[type="range"]::-moz-range-thumb {
 .tag.output { background: rgba(136, 212, 255, 0.18); color: var(--tag-output); }
 .tag.input  { background: rgba(184, 154, 240, 0.18); color: var(--tag-input); }
 
+/* Surfaces only while 2.5D extrude is on — flags that 3D camera nav is live. */
+.dyn-hint {
+  display: inline-block;
+  margin: 6px 0 0 23px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--tag-input);
+  background: rgba(184, 154, 240, 0.14);
+  border: 1px solid rgba(184, 154, 240, 0.30);
+  border-radius: 5px;
+  padding: 3px 9px;
+}
+
 /* ---- Legend -------------------------------------------------------------- */
 #legend {
   background: rgba(255, 255, 255, 0.03);
