@@ -205,7 +205,7 @@
     },
     viirs_radiance: {
       column: 'viirs_radiance', ramp: 'magma', label: 'Night-light radiance (VIIRS)',
-      kind: 'sequential', goodWhen: 'low', unit: '', lowLabel: 'dark', highLabel: 'bright'
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'dark', highLabel: 'bright'
     },
     eprtr_facility_min_m: {
       column: 'eprtr_facility_min_m', ramp: 'magma', label: 'E-PRTR facility (m away)',
@@ -213,11 +213,11 @@
     },
     industry_density_per_km2: {
       column: 'industry_density_per_km2', ramp: 'magma', label: 'Industry density (/km²)',
-      kind: 'sequential', goodWhen: 'low', unit: ' /km²', lowLabel: 'none', highLabel: 'dense'
+      kind: 'sequential', goodWhen: 'neutral', unit: ' /km²', lowLabel: 'none', highLabel: 'dense'
     },
     motorway_within_500m: {
       column: 'motorway_within_500m', ramp: 'magma', label: 'Motorway within 500 m',
-      kind: 'boolean', goodWhen: 'low', unit: '', lowLabel: 'no', highLabel: 'yes'
+      kind: 'boolean', goodWhen: 'neutral', unit: '', lowLabel: 'no', highLabel: 'yes'
     }
   };
 
@@ -634,23 +634,24 @@
     for (var i = 0; i < n; i++) {
       stops.push(rampColor(field.ramp, i / (n - 1)));
     }
-    var loVal, hiVal;
-    if (field.kind === 'diverging') {
-      loVal = formatNum(dom[0]); hiVal = formatNum(dom[1]);
-    } else if (field.goodWhen === 'low') {
-      // low-is-good: bright (high) end of the ramp = the good low raw value
-      loVal = formatNum(dom[1]) + esc(field.unit); hiVal = formatNum(dom[0]) + esc(field.unit);
-    } else {
-      loVal = formatNum(dom[0]) + esc(field.unit); hiVal = formatNum(dom[1]) + esc(field.unit);
-    }
+    // The ramp runs dark (low end) -> bright (high end). _normalise inverts
+    // goodWhen:'low' metrics so the GOOD low raw value lands at the BRIGHT end,
+    // so the legend must swap BOTH the numeric ends AND their word labels together
+    // (previously only the numbers were swapped -> "1.20 µg/m³ · polluted").
+    var swap = (field.goodWhen === 'low');
+    var u = esc(field.unit);
+    var loVal = formatNum(swap ? dom[1] : dom[0]) + u;
+    var hiVal = formatNum(swap ? dom[0] : dom[1]) + u;
+    var loLabel = swap ? field.highLabel : field.lowLabel;
+    var hiLabel = swap ? field.lowLabel : field.highLabel;
     this.onLegend({
       label: field.label,
       kind: field.kind,
       stops: stops,
       lowVal: loVal,
       highVal: hiVal,
-      lowLabel: field.lowLabel,
-      highLabel: field.highLabel,
+      lowLabel: loLabel,
+      highLabel: hiLabel,
       nullColor: NULL_COLOR
     });
   };

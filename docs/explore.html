@@ -357,8 +357,9 @@ const METRIC_CAPTIONS = {
   uhi_delta_c: "Urban-heat-island Δ: summer-median land-surface temperature minus the " +
     "rural baseline (Landsat JJA 2024). A penalty above the baseline; brighter = cooler = " +
     "better — forest and coast read bright, hot inland cities and bare ground dark.",
-  viirs_radiance: "VIIRS night-time-light radiance, zonal-mean per hex (2024). A light-" +
-    "pollution penalty; brighter = darker sky = better — dark rural hexes bright, the BCN core dark.",
+  viirs_radiance: "VIIRS night-time-light radiance, zonal-mean per hex (2024). Shown raw — " +
+    "brighter = more night-light, so the lit cities glow and dark rural stays dark " +
+    "(still a light-pollution penalty in the score).",
   no2_ugm3: "Nearest-station annual NO₂ (µg/m³, XVPCA 2024). A penalty above the WHO-2021 " +
     "20 µg/m³ guideline; brighter = cleaner air = better. ~41% of hexes within a station's " +
     "15 km reach, rest grey.",
@@ -368,10 +369,10 @@ const METRIC_CAPTIONS = {
   eprtr_facility_min_m: "Metres to the nearest E-PRTR industrial-emission facility " +
     "(cap 50 km). Brighter = farther from industry = better; the closest, most-exposed " +
     "hexes read dark.",
-  industry_density_per_km2: "Industrial land density — a penalty input. 100% coverage; " +
-    "brighter = less industry nearby = better.",
-  motorway_within_500m: "Whether a motorway runs within 500 m (a noise-penalty cue). " +
-    "Binary; brighter = no motorway nearby = better."
+  industry_density_per_km2: "Industrial land density (/km²). Shown raw — brighter = denser " +
+    "industry nearby (a penalty input to the score). 100% coverage.",
+  motorway_within_500m: "Whether a motorway runs within 500 m. Shown raw — brighter = a " +
+    "motorway within 500 m (a noise-penalty cue in the score). Binary."
 };
 
 function renderLegend(info) {
