@@ -190,7 +190,7 @@ input[type="range"]::-moz-range-thumb {
 
 /* Surfaces only while 2.5D extrude is on — flags that 3D camera nav is live. */
 .dyn-hint {
-  display: inline-block;
+  display: none;
   margin: 6px 0 0 23px;
   font-size: 10.5px;
   line-height: 1.4;
@@ -200,6 +200,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 5px;
   padding: 3px 9px;
 }
+.dyn-hint.is-on { display: inline-block; }
 
 /* ---- Legend -------------------------------------------------------------- */
 #legend {

@@ -122,11 +122,11 @@
       </div>
 
       <div class="layer-row" style="margin-left:23px; margin-top:10px">
-        <label><input type="checkbox" id="toggle-extrude">
+        <label><input type="checkbox" id="toggle-extrude" autocomplete="off">
           2.5D extrude <span class="tag">view</span></label>
         <p class="caption">Raise each hex by the active field for a 2.5D read (tilts the
           camera). Elevation scale shrinks with zoom so towers don't occlude the base.</p>
-        <p class="dyn-hint" id="extrude-hint" hidden>↻ Ctrl/Shift-drag + scroll for 3D navigation</p>
+        <p class="dyn-hint" id="extrude-hint">↻ Ctrl/Shift-drag + scroll for 3D navigation</p>
       </div>
 
       <div class="layer-row" style="margin-top:18px">
@@ -502,7 +502,7 @@ async function main() {
 
   document.getElementById("toggle-extrude").addEventListener("change", (e) => {
     gb.setExtrude(e.target.checked);
-    document.getElementById("extrude-hint").hidden = !e.target.checked;
+    document.getElementById("extrude-hint").classList.toggle("is-on", e.target.checked);
   });
 
   document.getElementById("basemap-select").addEventListener("change", (e) => {
