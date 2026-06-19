@@ -46,12 +46,11 @@
   // and the legend. Colourblind-aware (Okabe-Ito-derived, distinct hues).
   var CATEGORICAL = {
     mobility_typology: {
-      'commuter-dormitory': [86, 180, 233],   // sky blue — sends people out
-      'employment-sink': [230, 159, 0],        // orange — pulls people in
+      'commuter-corridor': [230, 159, 0],      // orange — high work/study pull
       'leisure-magnet': [204, 121, 167],       // pink — weekend/leisure draw
       'transit-corridor': [240, 228, 66],      // yellow — long through-trips
       'self-contained': [0, 158, 115],         // green — complete neighbourhood
-      'mixed-balanced': [153, 153, 153]        // neutral grey-blue — no dominant axis
+      'mixed-balanced': [153, 153, 153]        // neutral grey — no dominant axis
     },
     peak_hour_bucket: {
       morning: [86, 180, 233],   // blue — am commute tide
@@ -238,12 +237,12 @@
       kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
     },
     female_share: {
-      column: 'female_share', ramp: 'viridis', label: 'Female inflow share',
+      column: 'female_share', ramp: 'viridis', label: 'Female inflow share (of known-sex trips)',
       kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
     },
     support_n: {
-      column: 'support_n', ramp: 'magma', label: 'Trip-count support (confidence)',
-      kind: 'sequential', goodWhen: 'neutral', unit: ' trips', lowLabel: 'sparse', highLabel: 'dense'
+      column: 'support_n', ramp: 'magma', label: 'OD-segment row count (density proxy)',
+      kind: 'sequential', goodWhen: 'neutral', unit: ' rows', lowLabel: 'sparse', highLabel: 'dense'
     },
     train_reach_min: {
       column: 'train_reach_min', ramp: 'viridis', label: 'Train reach (min, bike)',

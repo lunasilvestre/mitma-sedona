@@ -115,7 +115,7 @@
             <option value="youth_mobility_share">Youth (0–25) inflow share</option>
             <option value="senior_mobility_share">Senior (65+) inflow share</option>
             <option value="female_share">Female inflow share</option>
-            <option value="support_n">Trip-count support (confidence)</option>
+            <option value="support_n">OD-segment row count (density proxy)</option>
           </optgroup>
           <option value="mitma_inflow_daily">MITMA inflow (trips/day)</option>
           <option value="mitma_through_ratio">Through-ratio (sink ↔ source, diverging)</option>
@@ -275,10 +275,10 @@
               <td><strong>Mobility rhythm &amp; typology</strong><span class="w">w 0.0†</span></td>
               <td>
                 <span class="src live">MITMA hourly OD cube → 24h rhythm + AM/PM/midday/night peak shares (Sedona Window + max_by)</span>
-                <span class="src live">weekend ÷ weekday ratio + leisure share + weekend-hotspot score (min-support gated)</span>
-                <span class="src live">mobility typology (Spark MLlib BisectingKMeans: commuter-dormitory / employment-sink / leisure-magnet / transit-corridor / self-contained)</span>
-                <span class="src live">geodemographic inflow shares (income / age / sex) + income×age Shannon-entropy diversity</span>
-                <span class="src live">self-containment (intra-zone share) · trip-count support</span>
+                <span class="src live">weekend ÷ weekday ratio + leisure share + weekend-hotspot score (min-rows gated)</span>
+                <span class="src live">mobility typology (Spark MLlib KMeans: commuter-corridor / leisure-magnet / transit-corridor / self-contained / mixed-balanced)</span>
+                <span class="src live">geodemographic inflow shares over the KNOWN subset (income / age / sex) + income×age Shannon-entropy diversity (bits)</span>
+                <span class="src live">self-containment (intra-zone share) · OD-segment row count (density proxy)</span>
               </td>
             </tr>
           </tbody>
@@ -379,27 +379,32 @@ const METRIC_CAPTIONS = {
     "vs 5 weekday days). Above 1× (warm) = busier on Sat/Sun: beaches, trail-heads, " +
     "second-home zones. Diverging, pivot 1.0.",
   weekend_hotspot_score: "Weekend draw = weekend/weekday ratio × leisure intensity, gated by " +
-    "a min-support trip floor (the MITMA <100-device privacy floor makes sparse ratios " +
-    "unstable). Above 1 = a genuine weekend hotspot. Diverging, pivot 1.0.",
+    "a min-rows floor on the OD-segment row count (sparse hexes give noisy ratios). Above 1 = " +
+    "a genuine weekend hotspot. Diverging, pivot 1.0. NB: the MITMA <100-device privacy floor " +
+    "is applied before publication and is invisible in the expanded open data.",
   leisure_share: "Share of inflowing trips whose destination activity is leisure (frequent / " +
     "non-frequent), vs commute/home. High = a leisure magnet. From the full activity cube.",
   intra_zone_share: "Share of trips that start AND end in the same zone — self-containment. " +
     "High = a complete neighbourhood (errands stay local); low = a commuter dormitory. " +
     "Brighter = more self-contained.",
-  geodemo_diversity: "Shannon entropy (bits) over the joint income × age distribution of " +
-    "inflowing trips — WHO moves through, from the dataset's own segments (no census join). " +
-    "Brighter = a more demographically mixed flow. NA segments kept as their own bucket.",
-  low_income_inflow_share: "Share of inflowing trips from the lowest income band (<10 renta " +
-    "decile). Descriptive (neutral); NA-income kept as its own bucket so shares aren't biased.",
-  youth_mobility_share: "Share of inflowing trips by the 0–25 age band. Descriptive (neutral); " +
-    "NA-age kept as its own bucket.",
-  senior_mobility_share: "Share of inflowing trips by the 65+ age band. Descriptive (neutral); " +
-    "NA-age kept as its own bucket.",
-  female_share: "Share of inflowing trips by women (sexo = mujer). Descriptive (neutral); " +
-    "NA-sex kept as its own bucket, so this reads low where the segment is mostly unlabelled.",
-  support_n: "Total trip count behind each hex's mobility stats — a CONFIDENCE cue. Low " +
-    "support (sparse rural hexes near the MITMA privacy floor) means the ratios above are " +
-    "noisy; brighter = more trips = more reliable.",
+  geodemo_diversity: "Shannon entropy (bits — log base 2) over the joint income × age " +
+    "distribution of inflowing trips — WHO moves through, from the dataset's own segments (no " +
+    "census join). Brighter = a more demographically mixed flow. NA segments kept as their own " +
+    "bucket. Recomputed per-hex from the area-weighted joint histogram.",
+  low_income_inflow_share: "Share of the lowest income band (<10 renta) among KNOWN-income " +
+    "inflowing trips. Divided over the known subset so the NA-income mass doesn't deflate it. " +
+    "Descriptive (neutral).",
+  youth_mobility_share: "Share of the 0–25 age band among KNOWN-age inflowing trips (NA-age " +
+    "excluded from the denominator). Descriptive (neutral).",
+  senior_mobility_share: "Share of the 65+ age band among KNOWN-age inflowing trips (NA-age " +
+    "excluded from the denominator). Descriptive (neutral).",
+  female_share: "Share of women among KNOWN-sex inflowing trips — mujer ÷ (hombre + mujer). " +
+    "Divided over the known subset (NA-sex is ~⅓ of trips and is excluded from the denominator), " +
+    "so this reads around 0.5, not deflated. Descriptive (neutral).",
+  support_n: "OD-segment ROW COUNT behind each hex's mobility stats — a coarse density / " +
+    "confidence proxy (more rows ≈ denser, more reliable aggregate). NOT the MITMA <100-device " +
+    "privacy gate: that suppression is applied before publication and is invisible in the " +
+    "expanded open data. Brighter = more rows.",
   train_reach_min: "Bike-minutes to reach a train station. Only ~22% of the grid has a " +
     "station in range; the rest is grey — \"none within reach\". Brighter = closer = better.",
   trains_per_day_nearest: "Trains/day at the nearest station. More frequent service is " +
