@@ -340,71 +340,42 @@ def zone_typology_indices(od, inflow, outflow):
 
 
 def label_typology(sedona, zone_features):
-    """Standardise the interpretable vector + MLlib BisectingKMeans -> label.
+    """Standardise the interpretable vector + MLlib KMeans -> data-driven label.
 
-    Five interpretable classes mapped from cluster centroids by their dominant
-    axis: commuter-dormitory / employment-sink / leisure-magnet /
-    transit-corridor / self-contained.
+    CONVERGED with the canonical pipeline (pipeline_gold): clusters on the
+    dimensions that genuinely vary (TYPOLOGY_FEATURES — intra_zone_share,
+    leisure_share, commute_share, long_trip_share), drops the degenerate
+    sink_source from the feature set, and names clusters from their ACTUAL
+    centroids via pipeline_gold._name_clusters. Labels:
+    commuter-corridor / leisure-magnet / transit-corridor / self-contained /
+    mixed-balanced (the unreliable sink/source pair is gone).
     """
     from pyspark.ml.feature import VectorAssembler, StandardScaler
-    from pyspark.ml.clustering import BisectingKMeans
+    from pyspark.ml.clustering import KMeans
+    from catmob.pipeline_gold import TYPOLOGY_FEATURES, _name_clusters
 
-    feat_cols = [
-        "sink_source", "intra_zone_share", "long_trip_share",
-        "leisure_share", "commute_share",
-    ]
+    feat_cols = list(TYPOLOGY_FEATURES)
     df = zone_features
     for c in feat_cols:
         df = df.withColumn(c, F.coalesce(F.col(c).cast("double"), F.lit(0.0)))
     assembler = VectorAssembler(inputCols=feat_cols, outputCol="_v", handleInvalid="keep")
     scaler = StandardScaler(inputCol="_v", outputCol="_vs", withMean=True, withStd=True)
     vec = assembler.transform(df)
-    model = scaler.fit(vec)
-    scaled = model.transform(vec)
-    k = 5
-    bkm = BisectingKMeans(k=k, featuresCol="_vs", predictionCol="_cluster", seed=42)
-    km = bkm.fit(scaled)
+    scaler_model = scaler.fit(vec)
+    scaled = scaler_model.transform(vec)
+    km = KMeans(k=5, featuresCol="_vs", predictionCol="_cluster", seed=42,
+                initMode="k-means||", initSteps=5, maxIter=50).fit(scaled)
     clustered = km.transform(scaled)
 
-    # Name clusters by their centroid's dominant standardised axis.
-    centers = km.clusterCenters()
-    axis_label = {
-        0: "commuter-dormitory",   # sink_source high (more outflow)
-        1: "employment-sink",      # sink_source low (more inflow)
-        2: "leisure-magnet",       # leisure_share high
-        3: "transit-corridor",     # long_trip_share high
-        4: "self-contained",       # intra_zone_share high
-    }
-    # Map each cluster id -> label by which standardised feature dominates.
-    # BisectingKMeans can return FEWER than k clusters on a small/degenerate
-    # sample, so iterate over the ACTUAL centroids, never range(k).
-    import numpy as np
-    n_clusters = len(centers)
-    label_for_cluster = {}
-    used = set()
-    # Greedy: assign the label whose driving axis the centroid maximises.
-    driving_axis = {0: 0, 1: 0, 2: 3, 3: 2, 4: 1}  # label_idx -> feat index (sink_source sign handled below)
-    order = sorted(range(n_clusters), key=lambda ci: -float(np.max(np.abs(centers[ci]))))
-    for ci in order:
-        c = centers[ci]
-        # score each candidate label by centroid alignment to its axis
-        best, best_lab = -1e18, None
-        for lab_idx, ax in driving_axis.items():
-            if lab_idx in used:
-                continue
-            val = c[ax]
-            if lab_idx == 0:   # commuter-dormitory wants HIGH sink_source
-                metric = val
-            elif lab_idx == 1: # employment-sink wants LOW sink_source
-                metric = -val
-            else:
-                metric = val
-            if metric > best:
-                best, best_lab = metric, lab_idx
-        if best_lab is None:
-            best_lab = next(i for i in axis_label if i not in used)
-        used.add(best_lab)
-        label_for_cluster[ci] = axis_label[best_lab]
+    centers_std = km.clusterCenters()
+    means = {c: float(scaler_model.mean[i]) for i, c in enumerate(feat_cols)}
+    stds_v = {c: float(scaler_model.std[i]) for i, c in enumerate(feat_cols)}
+    centers_raw = [
+        {c: means[c] + centers_std[i][j] * stds_v[c] for j, c in enumerate(feat_cols)}
+        for i in range(len(centers_std))
+    ]
+    pop = df.select(*[F.avg(c).alias(c) for c in feat_cols]).collect()[0].asDict()
+    label_for_cluster = _name_clusters(centers_std, centers_raw, pop, feat_cols)
 
     mapping = F.create_map(*sum(([F.lit(k_), F.lit(v_)] for k_, v_ in label_for_cluster.items()), []))
     labelled = clustered.withColumn("mobility_typology", mapping[F.col("_cluster")])
@@ -497,12 +468,12 @@ def build_arcs(sedona, od, xwalk):
 def main() -> None:
     SILVER.mkdir(parents=True, exist_ok=True)
     GOLD.mkdir(parents=True, exist_ok=True)
-    # enable_rtree=True: park pyspark's duplicate jts-core so the shaded Sedona
-    # jar's JTS is the only copy on the classpath -> the indexed
-    # BroadcastIndexJoin (R-tree) executes (the earlier IllegalAccessError on
-    # IndexSerde.getItemBoundables() was a two-jts-on-two-loaders split; proven
-    # fixed — see catmob.spark._isolate_shaded_jts).
-    sedona = get_sedona("mitma-layers", driver_memory="6g", enable_rtree=True)
+    # enable_rtree stays OFF here: this script reads the bronze PARQUET, and the
+    # jts-isolation that enables the indexed R-tree BroadcastIndexJoin breaks the
+    # parquet read codegen in the same JVM on this Spark/Sedona pair. The R-tree
+    # path is proven in isolation (catmob.spark._isolate_shaded_jts); the safe
+    # non-indexed RangeJoin is correct and fast on the 584-zone broadcast side.
+    sedona = get_sedona("mitma-layers", driver_memory="6g", enable_rtree=False)
     try:
         print("[1/8] building dasymetric crosswalk (Sedona ST_Intersection in 25831)...")
         xwalk = build_crosswalk(sedona).cache()
