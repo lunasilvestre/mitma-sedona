@@ -219,6 +219,19 @@ sedona.sql("""
 the broadcast threshold. The hint forces a `BroadcastIndexJoin` on the
 small side, which builds an R-tree per executor on the broadcast hexes.
 
+> **What the mitma-sedona pipeline actually ships.** This SQL is the
+> *reference* shape. In the shipped pipeline the **OD rows never hit a
+> spatial join** — they reach the H3 grid through a cheap broadcast
+> *equi*-join on `zone_id`. The one spatial join is the **one-time
+> crosswalk build** (584 distrito polygons vs the H3 grid in
+> `pipeline_silver.py`). And on the current build the indexed
+> `BroadcastIndexJoin` above is **not** active: `src/catmob/spark.py` sets
+> `sedona.join.optimizationmode="none"` to dodge a dual-JTS
+> `IllegalAccessError` (Spark 4.1.1 + sedona-shaded-4.0), falling back to a
+> correct non-indexed range join. Flipping it back to `"all"` and proving
+> the R-tree path is an atlas STAGE-0 task — see
+> [why_spark_sedona.md](why_spark_sedona.md).
+
 > **AQE caveat (SEDONA-56):** broadcast spatial joins historically failed
 > under Spark AQE; the 1.7+ `RangeJoinExec` rework fixed it but if you see
 > a `MatchError` on `Exchange`, set `spark.sql.adaptive.enabled=false` for

@@ -25,8 +25,13 @@ mitma-sedona/
 ## Lakehouse architecture
 
 Bronze → Silver → Gold lakehouse, with H3 res-8 hex grid as the
-analytical grain. Sedona handles every spatial join. Pandera validates
-every bronze write.
+analytical grain. Sedona handles the spatial work — but note that the
+heavy mobility step is **not** a giant spatial join: the OD rows reach the
+H3 grid through a cheap broadcast **equi**-join on `zone_id`, and the only
+spatial join is the **one-time zone→hex dasymetric crosswalk** (584 distrito
+polygons vs the H3 grid; see
+[why_spark_sedona.md](why_spark_sedona.md)). Pandera validates every bronze
+write.
 
 - **Bronze** — raw ingested sources (MITMA OD parquet, OSM POIs / network /
   stations, GTFS, air-quality stations, Landsat LST, Natura 2000, E-PRTR,
