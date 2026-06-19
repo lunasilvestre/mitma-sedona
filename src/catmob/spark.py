@@ -12,9 +12,11 @@ Pinned coordinates (the SEDONA_PACKAGES already proven in notebook 01):
     org.datasyslab:geotools-wrapper:1.9.0-33.5
 
 Sedona's "4.0" shaded artifact is also the right pick for Spark 4.1.x on the
-sample (local[*]); at full scale on *atlas* pin a matched Spark/Sedona pair
-to kill the FoldableUnevaluable version skew (see docs/why_spark_sedona.md
-STAGE 0).
+sample (local[*]). The indexed R-tree BroadcastIndexJoin works on this pair
+once pyspark's duplicate ``jts-core`` is parked so the shaded jar's JTS is the
+only copy on the classpath — pass ``enable_rtree=True`` (see
+:func:`_isolate_shaded_jts`). Without that, the safe non-indexed RangeJoin is
+used (``optimizationmode='none'``), which is correct and fast at sample scale.
 
 Run with the sedona env python::
 
@@ -37,27 +39,68 @@ SEDONA_PACKAGES = (
 DEFAULT_JAVA_HOME = "/home/nls/miniforge3/envs/sedona/lib/jvm"
 
 
-def _pyspark_jts_jar() -> str | None:
-    """Locate pyspark's bundled ``jts-core`` jar.
-
-    CLASSLOADER FIX: the sedona-spark-shaded jar bundles its own (byte-identical
-    JTS 1.20.0) copy of ``org.locationtech.jts`` loaded by the Spark
-    MutableURLClassLoader (from ``--packages``), while pyspark ships the same
-    JTS on the app/system loader. Sedona's R-tree ``IndexSerde`` (shaded loader)
-    then tries to call the package-private ``AbstractSTRtree.getItemBoundables()``
-    on an instance from the *other* loader -> ``IllegalAccessError`` during the
-    broadcast spatial-index serialize. Pinning the pyspark jts-core jar onto
-    ``spark.{driver,executor}.extraClassPath`` (the SYSTEM classpath, parent to
-    the MutableURLClassLoader) makes both classes resolve from one loader and
-    removes the split.
-    """
+def _pyspark_jts_jars() -> list[Path]:
+    """Locate pyspark's bundled ``jts-core`` jar(s)."""
     try:
         import pyspark
 
-        jars = glob.glob(str(Path(pyspark.__file__).parent / "jars" / "jts-core-*.jar"))
-        return jars[0] if jars else None
+        return [Path(p) for p in glob.glob(
+            str(Path(pyspark.__file__).parent / "jars" / "jts-core-*.jar")
+        )]
     except Exception:
-        return None
+        return []
+
+
+# Sentinel suffix for the parked pyspark jts jar (see _isolate_shaded_jts).
+_JTS_PARKED_SUFFIX = ".disabled_for_sedona_rtree"
+
+
+def _isolate_shaded_jts() -> list[tuple[Path, Path]]:
+    """Make the shaded Sedona jar's JTS the ONLY ``jts-core`` on the classpath.
+
+    THE proven fix for the R-tree ``BroadcastIndexJoin`` (review item 5).
+
+    Root cause (diagnosed on Spark 4.1.1 + sedona-spark-shaded-4.0_2.13:1.9.0):
+    the shaded Sedona jar bundles JTS *un-relocated* at ``org.locationtech.jts``
+    and is loaded by the Spark ``MutableURLClassLoader`` (from ``--packages``),
+    while pyspark ALSO ships ``jts-core-1.20.0.jar`` on the ``app`` loader. When
+    Sedona serialises a broadcast R-tree, its ``IndexSerde`` (shaded loader)
+    calls the *package-private* ``AbstractSTRtree.getItemBoundables()`` on an
+    instance resolved from the *other* loader -> ``IllegalAccessError`` and the
+    indexed join dies. (Verified dead ends: pinning the pyspark jar onto
+    ``extraClassPath`` keeps two loaders; ``userClassPathFirst`` breaks Sedona
+    init; the unshaded artifact hits the Spark-4.0-vs-4.1 ``FoldableUnevaluable``
+    skew.)
+
+    Parking pyspark's ``jts-core`` jar (renaming it aside) leaves the shaded
+    jar's JTS as the single copy, so ``IndexSerde`` and ``AbstractSTRtree``
+    resolve from one loader and the ``BroadcastIndexJoin`` (``SpatialIndex
+    RTREE``) executes. This MUST run before the JVM launches (pyspark globs
+    ``jars/*.jar`` at gateway start). Returns the list of ``(parked, original)``
+    paths so the caller / atexit can restore them.
+    """
+    moved: list[tuple[Path, Path]] = []
+    for jar in _pyspark_jts_jars():
+        parked = jar.with_name(jar.name + _JTS_PARKED_SUFFIX)
+        try:
+            jar.rename(parked)
+            moved.append((parked, jar))
+        except OSError:
+            # Read-only install or already parked — leave it; restore what we did.
+            continue
+    if moved:
+        import atexit
+
+        def _restore():
+            for parked, original in moved:
+                if parked.exists() and not original.exists():
+                    try:
+                        parked.rename(original)
+                    except OSError:
+                        pass
+
+        atexit.register(_restore)
+    return moved
 
 
 def _ensure_jvm_env(java_home: str | None = None) -> None:
@@ -83,6 +126,7 @@ def get_sedona(
     java_home: str | None = None,
     driver_memory: str = "6g",
     shuffle_partitions: int | None = None,
+    enable_rtree: bool = False,
     extra_conf: dict[str, str] | None = None,
 ):
     """Build (or fetch) a SedonaContext-bound SparkSession.
@@ -101,6 +145,13 @@ def get_sedona(
     shuffle_partitions
         If given, pins ``spark.sql.shuffle.partitions`` (AQE coalesces down
         from here). ``None`` leaves the Spark default (200) so AQE governs.
+    enable_rtree
+        If True, isolate the shaded Sedona jar's JTS (park pyspark's
+        ``jts-core``) and set ``sedona.join.optimizationmode='all'`` so the
+        indexed ``BroadcastIndexJoin`` (R-tree) is used and actually executes on
+        this Spark/Sedona pair. Default False keeps the safe non-indexed
+        ``RangeJoin`` (``optimizationmode='none'``) which is correct and fast at
+        sample scale. See :func:`_isolate_shaded_jts` for the root cause.
     extra_conf
         Any additional ``spark.*`` / ``sedona.*`` keys to set.
 
@@ -111,6 +162,12 @@ def get_sedona(
         done (or use :func:`sedona_session`).
     """
     _ensure_jvm_env(java_home)
+
+    # R-tree path: park pyspark's duplicate jts-core BEFORE the JVM launches so
+    # the shaded Sedona jar's JTS is the only copy on the classpath (the proven
+    # fix for the IndexSerde IllegalAccessError — see _isolate_shaded_jts).
+    if enable_rtree:
+        _isolate_shaded_jts()
 
     # Import here (not at module top) so that merely importing this module in a
     # JVM-less context (e.g. doc build) does not require pyspark.
@@ -129,16 +186,15 @@ def get_sedona(
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
         # Sedona spatial-join tuning (docs/sedona_sql_patterns.md §6).
-        # optimizationmode="none" on THIS build (Spark 4.1.1 + sedona-shaded-4.0):
-        # the indexed BroadcastIndexJoin serializes a JTS R-tree via Sedona's
-        # IndexSerde, which on this version-skewed pair throws an
-        # IllegalAccessError (IndexSerde [shaded loader] vs AbstractSTRtree
-        # [pyspark loader] split — getItemBoundables() is package-private). The
-        # non-indexed RangeJoin still pushes ST_Intersects down and is correct;
-        # the small (584-zone) broadcast side keeps it fast at sample scale.
-        # On *atlas* with a matched Spark/Sedona pair (STAGE 0) flip this back to
-        # "all" to restore the R-tree-indexed join for billions of OD rows.
-        .config("sedona.join.optimizationmode", "none")
+        # optimizationmode: "all" enables the indexed BroadcastIndexJoin (R-tree);
+        # "none" falls back to the non-indexed RangeJoin (still pushes
+        # ST_Intersects down, correct, fast on the small 584-zone broadcast side).
+        # On THIS build (Spark 4.1.1 + sedona-shaded-4.0) the R-tree IndexSerde
+        # throws IllegalAccessError UNLESS pyspark's duplicate jts-core is parked
+        # (enable_rtree=True does this — _isolate_shaded_jts). So we only switch
+        # to "all" when the caller has asked for (and we have isolated) the
+        # R-tree path; otherwise we stay on the safe "none" mode.
+        .config("sedona.join.optimizationmode", "all" if enable_rtree else "none")
         .config("sedona.join.autoBroadcastJoinThreshold", "100MB")
         .config("sedona.global.indextype", "rtree")
         .config("spark.sql.autoBroadcastJoinThreshold", "50MB")

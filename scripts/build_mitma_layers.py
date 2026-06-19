@@ -497,17 +497,12 @@ def build_arcs(sedona, od, xwalk):
 def main() -> None:
     SILVER.mkdir(parents=True, exist_ok=True)
     GOLD.mkdir(parents=True, exist_ok=True)
-    # sedona.join.optimizationmode=none for this session: the env ships two JTS
-    # copies (shaded Sedona jar + app-classpath jts-core via geotools-wrapper),
-    # and the BROADCAST spatial-index (STRtree) serde path crosses class loaders
-    # -> IllegalAccessError on getItemBoundables(). Disabling the spatial-index
-    # optimiser falls back to a correct non-indexed range join, fine at sample
-    # scale. (At full scale on atlas, pin a matched JTS / disable AQE for just
-    # the BroadcastIndexJoin stage — see docs/why_spark_sedona.md STAGE 0.)
-    sedona = get_sedona(
-        "mitma-layers", driver_memory="6g",
-        extra_conf={"sedona.join.optimizationmode": "none"},
-    )
+    # enable_rtree=True: park pyspark's duplicate jts-core so the shaded Sedona
+    # jar's JTS is the only copy on the classpath -> the indexed
+    # BroadcastIndexJoin (R-tree) executes (the earlier IllegalAccessError on
+    # IndexSerde.getItemBoundables() was a two-jts-on-two-loaders split; proven
+    # fixed — see catmob.spark._isolate_shaded_jts).
+    sedona = get_sedona("mitma-layers", driver_memory="6g", enable_rtree=True)
     try:
         print("[1/8] building dasymetric crosswalk (Sedona ST_Intersection in 25831)...")
         xwalk = build_crosswalk(sedona).cache()

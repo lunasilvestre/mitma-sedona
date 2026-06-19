@@ -64,12 +64,21 @@ def main() -> None:
                     help="read the partitioned bronze lakehouse (pruned) instead of re-ingesting CSV")
     ap.add_argument("--fecha-start", default=None, help="YYYYMMDD window start (inclusive)")
     ap.add_argument("--fecha-end", default=None, help="YYYYMMDD window end (inclusive)")
+    ap.add_argument("--no-rtree", action="store_true",
+                    help="use the non-indexed RangeJoin (default: indexed R-tree BroadcastIndexJoin)")
     args = ap.parse_args()
 
     gold_dir = GOLD_ROOT / f"zoning={args.zoning}"
     gold_dir.mkdir(parents=True, exist_ok=True)
 
-    spark = get_sedona(app_name=f"mitma-pipeline-{args.zoning}", driver_memory=args.driver_memory)
+    # Default to the proven indexed R-tree spatial join (review item 5); the
+    # crosswalk is the one heavy spatial join and benefits from the index at
+    # scale. --no-rtree falls back to the safe non-indexed RangeJoin.
+    spark = get_sedona(app_name=f"mitma-pipeline-{args.zoning}",
+                       driver_memory=args.driver_memory,
+                       enable_rtree=not args.no_rtree)
+    print(f"[spark] sedona.join.optimizationmode={spark.conf.get('sedona.join.optimizationmode')} "
+          f"(R-tree {'ON' if not args.no_rtree else 'off'})")
     spark.sparkContext.setLogLevel("ERROR")
 
     # ---- BRONZE ----------------------------------------------------------
