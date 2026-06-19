@@ -248,6 +248,28 @@ input[type="range"]::-moz-range-thumb {
   display: inline-block;
   flex: 0 0 auto;
 }
+/* Categorical legend (mobility typology / peak-hour band) */
+.lg-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 4px;
+}
+.lg-cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.lg-cat-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.lg-cat-label { color: var(--text, #e8eaf2); }
 
 /* ---- Headline metrics ---------------------------------------------------- */
 .metrics-grid {
@@ -438,6 +460,9 @@ footer .caption { font-size: 11px; color: var(--dim); margin: 0 0 8px; line-heig
 .gb-tooltip .tt-value { font-size: 14px; margin: 2px 0; }
 .gb-tooltip .tt-id { color: var(--dim); font-size: 10px; font-family: ui-monospace, monospace; }
 .gb-tooltip .tt-null { color: #b8c0d0; font-style: italic; }
+.gb-tooltip .tt-spark { margin: 5px 0 2px; }
+.gb-tooltip .tt-spark svg { display: block; width: 168px; height: 34px; }
+.gb-tooltip .tt-spark-cap { color: var(--dim); font-size: 9.5px; margin-top: 1px; }
 
 /* ---- Mobile: stack panel over map --------------------------------------- */
 @media (max-width: 760px) {

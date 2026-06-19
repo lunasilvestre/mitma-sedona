@@ -100,6 +100,23 @@
         <label class="field-label" for="metric-select">Recolour by analytic dimension</label>
         <select id="metric-select">
           <option value="score">— liveability score (the output) —</option>
+          <optgroup label="Mobility rhythm &amp; typology (v3 · Sedona deep-Spark)">
+            <option value="mobility_typology">Mobility typology (category)</option>
+            <option value="peak_hour_bucket">Peak-hour band (category)</option>
+            <option value="am_peak_share">AM-peak trip share (07–09h)</option>
+            <option value="pm_peak_share">PM-peak trip share (17–20h)</option>
+            <option value="night_share">Night trip share (22–05h)</option>
+            <option value="weekend_weekday_ratio">Weekend ÷ weekday trips (diverging)</option>
+            <option value="weekend_hotspot_score">Weekend hotspot score (diverging)</option>
+            <option value="leisure_share">Leisure-activity trip share</option>
+            <option value="intra_zone_share">Self-containment (intra-zone)</option>
+            <option value="geodemo_diversity">Geodemographic diversity (entropy)</option>
+            <option value="low_income_inflow_share">Low-income inflow share</option>
+            <option value="youth_mobility_share">Youth (0–25) inflow share</option>
+            <option value="senior_mobility_share">Senior (65+) inflow share</option>
+            <option value="female_share">Female inflow share</option>
+            <option value="support_n">Trip-count support (confidence)</option>
+          </optgroup>
           <option value="mitma_inflow_daily">MITMA inflow (trips/day)</option>
           <option value="mitma_through_ratio">Through-ratio (sink ↔ source, diverging)</option>
           <option value="train_reach_min">Train reach (min, bike) · presence</option>
@@ -250,8 +267,18 @@
             <tr>
               <td><strong>Mobility "vibe"</strong><span class="w">w 0.0*</span></td>
               <td>
-                <span class="src live">MITMA daily OD inflow / outflow</span>
-                <span class="src live">through-flow ratio</span>
+                <span class="src live">MITMA daily OD inflow / outflow (v3: dasymetric, per-hex)</span>
+                <span class="src live">through-flow ratio = log(out/in), pivot 0</span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Mobility rhythm &amp; typology</strong><span class="w">w 0.0†</span></td>
+              <td>
+                <span class="src live">MITMA hourly OD cube → 24h rhythm + AM/PM/midday/night peak shares (Sedona Window + max_by)</span>
+                <span class="src live">weekend ÷ weekday ratio + leisure share + weekend-hotspot score (min-support gated)</span>
+                <span class="src live">mobility typology (Spark MLlib BisectingKMeans: commuter-dormitory / employment-sink / leisure-magnet / transit-corridor / self-contained)</span>
+                <span class="src live">geodemographic inflow shares (income / age / sex) + income×age Shannon-entropy diversity</span>
+                <span class="src live">self-containment (intra-zone share) · trip-count support</span>
               </td>
             </tr>
           </tbody>
@@ -262,7 +289,12 @@
           that you can recolour the map by right now; <span class="src-tag planned">planned</span> =
           a refinement not yet fed in — in v2.3 only Valhalla bike isochrones remain (they would
           sharpen the train-reach term). *the "vibe" weight is 0 by default — set positive in
-          <code>quiet_strict</code> to penalise busy through-flow.</p>
+          <code>quiet_strict</code> to penalise busy through-flow. †the v3 rhythm/typology layers
+          are <strong>browseable analytic dimensions</strong>, wired into <code>configs/weights.yaml</code>
+          at weight 0 by default (so the published score is unchanged); a preset opts in to
+          reward demographic-access diversity, leisure access or self-containment. Built by a real
+          distributed Apache Sedona pipeline — see
+          <a href="why_spark_sedona.md"><code>why_spark_sedona.md</code></a>.</p>
         <p class="caption" style="margin-bottom:0">
           Score range under the default preset: min 8 · median 59 · mean 57 · max 100 · std 14
           across 45,220 hexes. Mobility window is <strong>dev-scope</strong> (7 days, March 2024).
@@ -326,8 +358,48 @@ const METRIC_CAPTIONS = {
     "strong opener. Descriptive (neutral), not a liveability axis; brighter = busier destination.",
   mitma_outflow_daily: "Daily trips departing each hex (MITMA v2). Descriptive (neutral), " +
     "not a liveability axis; brighter = busier origin.",
-  mitma_through_ratio: "Outflow ÷ inflow. Below 1 = a sink (people arrive and stay); above " +
-    "1 = a source (people leave). Descriptive (neutral) — diverging ramp pivots at 1.0.",
+  mitma_through_ratio: "log(outflow ÷ inflow) on the dasymetric per-hex flow. Below 0 = a " +
+    "sink (people arrive and stay); above 0 = a source (people leave). Descriptive (neutral) " +
+    "— diverging ramp pivots at 0.0. v3: recomputed via the Sedona area-weighted crosswalk.",
+  // === v3 MITMA deep-Spark mobility layers ===
+  mobility_typology: "Each hex's mobility CLASS from a Spark MLlib BisectingKMeans over " +
+    "interpretable indices (sink/source, self-containment, long-trip share, leisure vs " +
+    "commute). Categorical — colour = class, not magnitude. Built from the full hourly OD " +
+    "cube, disaggregated to hexes via the Sedona dasymetric crosswalk.",
+  peak_hour_bucket: "When each hex's inflow peaks (MAX_BY over the 24h profile): morning / " +
+    "midday / evening / night. Categorical. Sharp morning/evening hexes are commuter-tidal; " +
+    "midday-flat hexes read as residential or leisure.",
+  am_peak_share: "Share of a hex's daily trips arriving 07–09h. High = a sharp morning " +
+    "commuter tide; low/flat = residential or leisure. Hover for the full 24h sparkline.",
+  pm_peak_share: "Share of a hex's daily trips arriving 17–20h — the evening peak. High = a " +
+    "strong commuter return tide. Hover for the full 24h sparkline.",
+  night_share: "Share of a hex's daily trips 22–05h. Elevated where nightlife / overnight " +
+    "movement persists. Descriptive (neutral). Hover for the full 24h sparkline.",
+  weekend_weekday_ratio: "Mean weekend trips ÷ mean weekday trips (per-DAY means — 2 weekend " +
+    "vs 5 weekday days). Above 1× (warm) = busier on Sat/Sun: beaches, trail-heads, " +
+    "second-home zones. Diverging, pivot 1.0.",
+  weekend_hotspot_score: "Weekend draw = weekend/weekday ratio × leisure intensity, gated by " +
+    "a min-support trip floor (the MITMA <100-device privacy floor makes sparse ratios " +
+    "unstable). Above 1 = a genuine weekend hotspot. Diverging, pivot 1.0.",
+  leisure_share: "Share of inflowing trips whose destination activity is leisure (frequent / " +
+    "non-frequent), vs commute/home. High = a leisure magnet. From the full activity cube.",
+  intra_zone_share: "Share of trips that start AND end in the same zone — self-containment. " +
+    "High = a complete neighbourhood (errands stay local); low = a commuter dormitory. " +
+    "Brighter = more self-contained.",
+  geodemo_diversity: "Shannon entropy (bits) over the joint income × age distribution of " +
+    "inflowing trips — WHO moves through, from the dataset's own segments (no census join). " +
+    "Brighter = a more demographically mixed flow. NA segments kept as their own bucket.",
+  low_income_inflow_share: "Share of inflowing trips from the lowest income band (<10 renta " +
+    "decile). Descriptive (neutral); NA-income kept as its own bucket so shares aren't biased.",
+  youth_mobility_share: "Share of inflowing trips by the 0–25 age band. Descriptive (neutral); " +
+    "NA-age kept as its own bucket.",
+  senior_mobility_share: "Share of inflowing trips by the 65+ age band. Descriptive (neutral); " +
+    "NA-age kept as its own bucket.",
+  female_share: "Share of inflowing trips by women (sexo = mujer). Descriptive (neutral); " +
+    "NA-sex kept as its own bucket, so this reads low where the segment is mostly unlabelled.",
+  support_n: "Total trip count behind each hex's mobility stats — a CONFIDENCE cue. Low " +
+    "support (sparse rural hexes near the MITMA privacy floor) means the ratios above are " +
+    "noisy; brighter = more trips = more reliable.",
   train_reach_min: "Bike-minutes to reach a train station. Only ~22% of the grid has a " +
     "station in range; the rest is grey — \"none within reach\". Brighter = closer = better.",
   trains_per_day_nearest: "Trains/day at the nearest station. More frequent service is " +
@@ -378,6 +450,18 @@ const METRIC_CAPTIONS = {
 
 function renderLegend(info) {
   const el = document.getElementById("legend");
+  // Categorical legend: one labelled swatch per class present in the data.
+  if (info.kind === "categorical") {
+    const rows = (info.categories || []).map((c) =>
+      `<div class="lg-cat"><span class="lg-cat-swatch" style="background:${rgb(c.color)}"></span>` +
+      `<span class="lg-cat-label">${c.label}</span></div>`).join("");
+    el.innerHTML =
+      `<div class="lg-title">${info.label}</div>` +
+      `<div class="lg-cats">${rows}</div>` +
+      `<div class="lg-null"><span class="lg-null-swatch" style="background:${rgb(info.nullColor)}"></span>` +
+      `no data</div>`;
+    return;
+  }
   const swatches = info.stops.map((c) =>
     `<span class="lg-swatch" style="background:${rgb(c)}"></span>`).join("");
   el.innerHTML =
@@ -480,6 +564,7 @@ async function main() {
     }
   });
   gb.onLegend = renderLegend;
+  window.gb = gb;   // exposed for headless render checks / debugging (harmless)
   await gb.init();
 
   // ---- Wire the controls ----

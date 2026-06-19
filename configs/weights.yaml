@@ -64,6 +64,24 @@ default:
   pharmacy_density_log: 1.0           # log1p(density) positive — already correct
   # Mobility "vibe check" (off by default — set positive to penalise busy through-flow)
   mitma_through_ratio: 0.0
+  # ── v3 MITMA deep-Spark mobility reward terms (Sedona dasymetric crosswalk) ──
+  # All 0.0 by default so the PUBLISHED default score is byte-for-byte unchanged
+  # vs v2.x; a preset opts in by overriding. NULL feature or 0 weight -> weight*0
+  # (a no-op term — scoring.py adds them with s += value * w.get(key, 0)).
+  #   geodemo_diversity:     Shannon entropy (bits) over the income×age cube of
+  #                          inflowing trips — rewards balanced demographic access.
+  #   intra_zone_share:      self-containment (origin==destination share) —
+  #                          rewards complete-neighbourhood liveability.
+  #   weekend_hotspot_score: weekend draw × leisure intensity — a 'leisure access'
+  #                          reward (gated by the privacy-floor min-support).
+  #   leisure_share:         destination-leisure trip share.
+  #   night_share:           22–05h trip share — set NEGATIVE to penalise extreme
+  #                          night through-traffic in a 'lively but not noisy' preset.
+  geodemo_diversity: 0.0
+  intra_zone_share: 0.0
+  weekend_hotspot_score: 0.0
+  leisure_share: 0.0
+  night_share: 0.0
   # Score offset
   base_offset: 50.0
 

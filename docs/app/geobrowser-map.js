@@ -41,6 +41,26 @@
     ]
   };
 
+  // Categorical colour scales (kind:'categorical' fields). A fixed
+  // label->[r,g,b] map so a class always reads the same colour across the map
+  // and the legend. Colourblind-aware (Okabe-Ito-derived, distinct hues).
+  var CATEGORICAL = {
+    mobility_typology: {
+      'commuter-dormitory': [86, 180, 233],   // sky blue — sends people out
+      'employment-sink': [230, 159, 0],        // orange — pulls people in
+      'leisure-magnet': [204, 121, 167],       // pink — weekend/leisure draw
+      'transit-corridor': [240, 228, 66],      // yellow — long through-trips
+      'self-contained': [0, 158, 115],         // green — complete neighbourhood
+      'mixed-balanced': [153, 153, 153]        // neutral grey-blue — no dominant axis
+    },
+    peak_hour_bucket: {
+      morning: [86, 180, 233],   // blue — am commute tide
+      midday: [240, 228, 66],    // yellow — flat / midday
+      evening: [230, 159, 0],    // orange — pm peak
+      night: [120, 90, 200]      // violet — nightlife / overnight
+    }
+  };
+
   // NULL / no-data: a distinct desaturated slate grey. NEVER the low end of a
   // ramp, NEVER 0 — honesty over smooth fields.
   var NULL_COLOR = [120, 128, 140];
@@ -103,6 +123,26 @@
 
   function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
 
+  // Stable fallback palette for categorical labels not in CATEGORICAL[column]
+  // (e.g. a cluster suffix variant 'self-contained-2' the pipeline may emit).
+  var CAT_FALLBACK = [
+    [86, 180, 233], [230, 159, 0], [204, 121, 167], [240, 228, 66],
+    [0, 158, 115], [153, 153, 153], [213, 94, 0], [0, 114, 178]
+  ];
+  // Resolve a categorical label to its colour: exact map hit, else the base
+  // label with a trailing -<n> stripped, else a deterministic palette slot.
+  function categoricalColor(column, label) {
+    if (label == null) { return null; }
+    var cmap = CATEGORICAL[column] || {};
+    if (cmap[label]) { return cmap[label]; }
+    var base = String(label).replace(/-\d+$/, '');
+    if (cmap[base]) { return cmap[base]; }
+    var h = 0;
+    var s = String(label);
+    for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff; }
+    return CAT_FALLBACK[h % CAT_FALLBACK.length];
+  }
+
   // Sample a 6-stop ramp at t in [0,1] -> [r,g,b].
   function rampColor(name, t) {
     var stops = RAMPS[name] || RAMPS.viridis;
@@ -141,7 +181,69 @@
     },
     mitma_through_ratio: {
       column: 'mitma_through_ratio', ramp: 'RdBu', label: 'Through-ratio (sink ↔ source)',
-      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'sink', highLabel: 'source'
+      // v3 dasymetric: now log(outflow/inflow), so the natural pivot is 0.0.
+      kind: 'diverging', goodWhen: 'neutral', pivot: 0.0, unit: '', lowLabel: 'sink', highLabel: 'source'
+    },
+    // === v3 MITMA deep-Spark mobility layers (Sedona dasymetric crosswalk) ===
+    am_peak_share: {
+      column: 'am_peak_share', ramp: 'magma', label: 'AM-peak trip share (07–09h)',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal'
+    },
+    pm_peak_share: {
+      column: 'pm_peak_share', ramp: 'magma', label: 'PM-peak trip share (17–20h)',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal'
+    },
+    night_share: {
+      column: 'night_share', ramp: 'magma', label: 'Night trip share (22–05h)',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'quiet', highLabel: 'active'
+    },
+    peak_hour_bucket: {
+      column: 'peak_hour_bucket', ramp: 'viridis', label: 'Peak-hour band',
+      kind: 'categorical', goodWhen: 'neutral', unit: ''
+    },
+    weekend_weekday_ratio: {
+      column: 'weekend_weekday_ratio', ramp: 'RdBu', label: 'Weekend ÷ weekday trips',
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '×', lowLabel: 'weekday', highLabel: 'weekend'
+    },
+    weekend_hotspot_score: {
+      column: 'weekend_hotspot_score', ramp: 'RdBu', label: 'Weekend hotspot score',
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'weekday', highLabel: 'weekend draw'
+    },
+    leisure_share: {
+      column: 'leisure_share', ramp: 'viridis', label: 'Leisure-activity trip share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'errand', highLabel: 'leisure'
+    },
+    mobility_typology: {
+      column: 'mobility_typology', ramp: 'viridis', label: 'Mobility typology',
+      kind: 'categorical', goodWhen: 'neutral', unit: ''
+    },
+    intra_zone_share: {
+      column: 'intra_zone_share', ramp: 'viridis', label: 'Self-containment (intra-zone trips)',
+      kind: 'sequential', goodWhen: 'high', unit: '', lowLabel: 'commuter', highLabel: 'self-contained'
+    },
+    geodemo_diversity: {
+      column: 'geodemo_diversity', ramp: 'viridis', label: 'Geodemographic diversity (entropy)',
+      kind: 'sequential', goodWhen: 'high', unit: ' bits', lowLabel: 'uniform', highLabel: 'mixed'
+    },
+    low_income_inflow_share: {
+      column: 'low_income_inflow_share', ramp: 'viridis', label: 'Low-income inflow share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
+    },
+    youth_mobility_share: {
+      column: 'youth_mobility_share', ramp: 'viridis', label: 'Youth (0–25) inflow share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
+    },
+    senior_mobility_share: {
+      column: 'senior_mobility_share', ramp: 'viridis', label: 'Senior (65+) inflow share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
+    },
+    female_share: {
+      column: 'female_share', ramp: 'viridis', label: 'Female inflow share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'few', highLabel: 'many'
+    },
+    support_n: {
+      column: 'support_n', ramp: 'magma', label: 'Trip-count support (confidence)',
+      kind: 'sequential', goodWhen: 'neutral', unit: ' trips', lowLabel: 'sparse', highLabel: 'dense'
     },
     train_reach_min: {
       column: 'train_reach_min', ramp: 'viridis', label: 'Train reach (min, bike)',
@@ -237,6 +339,7 @@
     this._hexes = [];
     this._arcs = null;
     this._pois = null;
+    this._rhythm = null;   // lazy-loaded h3_id -> [24 floats] (hover sparkline)
     this.manifest = {};
 
     // View state of the thematic hex layer.
@@ -271,6 +374,17 @@
       self._render();
       return self;
     });
+  };
+
+  // Lazy-load the 24h rhythm sibling (h3_id -> [24 floats]). Called once when a
+  // rhythm field is first selected; the hover tooltip then draws a sparkline.
+  GeoBrowser.prototype.loadRhythm = function () {
+    var self = this;
+    if (this._rhythm || this._rhythmLoading) { return Promise.resolve(); }
+    this._rhythmLoading = true;
+    return this._fetchJson(this.dataBase + 'rhythm.json')
+      .then(function (d) { self._rhythm = d || {}; })
+      .catch(function () { self._rhythm = {}; });
   };
 
   GeoBrowser.prototype._fetchJson = function (url) {
@@ -403,6 +517,8 @@
   // Domain (min/max) for a column. Prefer manifest stats; else scan hexes once.
   GeoBrowser.prototype._domain = function (column) {
     if (this._domainCache[column]) { return this._domainCache[column]; }
+    // Categorical columns have no numeric domain.
+    if (CATEGORICAL[column]) { return null; }
     var dom = null;
 
     // Score columns: manifest.score_stats[<preset>].{min,max}
@@ -482,7 +598,10 @@
     var field = this._activeField();
     var column = field.column;
     var ramp = field.ramp;
-    var dom = this._domain(column);
+    // Categorical fields have no numeric domain (_domain returns null); use a
+    // placeholder [0,1] so the updateTriggers array deref is safe. The fill
+    // accessor ignores `dom` for categorical and reads the label->colour map.
+    var dom = this._domain(column) || [0, 1];
     var extrude = this._extrude;
     // elevationScale shrinks as zoom rises so towers don't occlude the base.
     var z = this._viewState.zoom || 8;
@@ -506,6 +625,12 @@
         if (v == null || (typeof v === 'number' && isNaN(v))) {
           return [NULL_COLOR[0], NULL_COLOR[1], NULL_COLOR[2], nullA];
         }
+        // Categorical fields: fixed label->colour map (not a ramp).
+        if (field.kind === 'categorical') {
+          var cc = categoricalColor(column, v);
+          if (!cc) { return [NULL_COLOR[0], NULL_COLOR[1], NULL_COLOR[2], nullA]; }
+          return [cc[0], cc[1], cc[2], self._fillAlpha];
+        }
         var t = self._normalise(field, v, dom);
         var c = rampColor(ramp, t);
         return [c[0], c[1], c[2], self._fillAlpha];
@@ -514,6 +639,8 @@
         if (!extrude) { return 0; }
         var v = d[column];
         if (v == null || (typeof v === 'number' && isNaN(v))) { return 0; }
+        // Categorical fields carry no magnitude — flat extrusion (full height).
+        if (field.kind === 'categorical') { return 1; }
         return self._normalise(field, v, dom);
       },
       updateTriggers: {
@@ -594,13 +721,24 @@
         valueHtml = '<span class="tt-null">no data</span>';
       } else if (field.kind === 'boolean') {
         valueHtml = '<strong>' + (v ? 'yes' : 'no') + '</strong>';
+      } else if (field.kind === 'categorical') {
+        valueHtml = '<strong>' + esc(v) + '</strong>';
       } else {
         valueHtml = '<strong>' + formatNum(v) + '</strong>' + esc(field.unit || '');
+      }
+      // 24h rhythm sparkline (when loaded) — the heavy profile array lives in
+      // the lazy rhythm.json sibling, NOT in hexes.json.
+      var sparkHtml = '';
+      var prof = this._rhythm && o.h3_id ? this._rhythm[o.h3_id] : null;
+      if (prof && prof.length === 24) {
+        sparkHtml = '<div class="tt-spark">' + sparkline(prof) +
+          '<div class="tt-spark-cap">hour-of-day trip share (0–23h)</div></div>';
       }
       return {
         html: '<div class="gb-tooltip">' +
           '<div class="tt-label">' + esc(field.label) + '</div>' +
           '<div class="tt-value">' + valueHtml + '</div>' +
+          sparkHtml +
           '<div class="tt-id">' + esc(o.h3_id || '') + '</div>' +
           '</div>',
         style: { background: 'transparent', boxShadow: 'none' }
@@ -628,6 +766,34 @@
   GeoBrowser.prototype._emitLegend = function () {
     if (typeof this.onLegend !== 'function') { return; }
     var field = this._activeField();
+
+    // Categorical legend: one swatch per label present in the data (ordered by
+    // the manifest's typology order when available, else the map's own order).
+    if (field.kind === 'categorical') {
+      var cmap = CATEGORICAL[field.column] || {};
+      var order = (field.column === 'mobility_typology' && this.manifest.typology_labels)
+        ? this.manifest.typology_labels : Object.keys(cmap);
+      var present = {};
+      for (var k = 0; k < this._hexes.length; k++) {
+        var lv = this._hexes[k][field.column];
+        if (lv != null) { present[lv] = true; }
+      }
+      // Include known labels in the manifest order first, then any extra labels
+      // actually present in the data (suffix variants / mixed-balanced), so the
+      // legend never omits a class the map paints.
+      var seen = {};
+      var ordered = order.filter(function (lab) { seen[lab] = true; return present[lab]; });
+      Object.keys(present).forEach(function (lab) { if (!seen[lab]) { ordered.push(lab); } });
+      var cats = ordered.map(function (lab) {
+        return { label: lab, color: categoricalColor(field.column, lab) || NULL_COLOR };
+      });
+      this.onLegend({
+        label: field.label, kind: 'categorical',
+        categories: cats, nullColor: NULL_COLOR
+      });
+      return;
+    }
+
     var dom = this._domain(field.column);
     var stops = [];
     var n = 6;
@@ -667,6 +833,14 @@
     if (!FIELDS[fieldKey]) { return; }
     this._fieldKey = fieldKey;
     this._render();
+    // Selecting a rhythm/peak field lazy-loads the 24h profiles so the hover
+    // tooltip can draw the sparkline; re-render once they arrive.
+    var rhythmFields = ['am_peak_share', 'pm_peak_share', 'midday_share',
+      'night_share', 'peak_hour_bucket'];
+    if (rhythmFields.indexOf(fieldKey) !== -1 && !this._rhythm) {
+      var self = this;
+      this.loadRhythm().then(function () { self._render(); });
+    }
   };
 
   GeoBrowser.prototype.setExtrude = function (on) {
@@ -758,9 +932,31 @@
     if (Number.isInteger(n)) { return String(n); }
     return n.toFixed(2);
   }
+  // Inline SVG sparkline (filled area) for a 24-value [0..maxshare] profile.
+  function sparkline(vals) {
+    var W = 168, H = 34, n = vals.length;
+    var max = 0;
+    for (var i = 0; i < n; i++) { if (vals[i] > max) { max = vals[i]; } }
+    if (max <= 0) { max = 1; }
+    var step = W / (n - 1);
+    var pts = [];
+    for (var j = 0; j < n; j++) {
+      var x = (j * step).toFixed(1);
+      var y = (H - (vals[j] / max) * (H - 4) - 2).toFixed(1);
+      pts.push(x + ',' + y);
+    }
+    var line = 'M' + pts.join(' L');
+    var area = line + ' L' + W + ',' + H + ' L0,' + H + ' Z';
+    return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H +
+      '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="' + area + '" fill="rgba(136,212,255,0.22)"/>' +
+      '<path d="' + line + '" fill="none" stroke="#88d4ff" stroke-width="1.4"/>' +
+      '</svg>';
+  }
 
   GeoBrowser.RAMPS = RAMPS;
   GeoBrowser.FIELDS = FIELDS;
+  GeoBrowser.CATEGORICAL = CATEGORICAL;
   GeoBrowser.BASEMAPS = BASEMAPS;
   GeoBrowser.DEFAULT_FILL_ALPHA = FILL_ALPHA;
   GeoBrowser.rampColor = rampColor;

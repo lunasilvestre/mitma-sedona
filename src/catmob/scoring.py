@@ -109,6 +109,21 @@ def score_hex(row: Mapping[str, float], weights: Mapping[str, float]) -> float:
     if pd.notna(row.get("mitma_through_ratio")):
         s += float(row["mitma_through_ratio"]) * w.get("mitma_through_ratio", 0)
 
+    # v3 MITMA deep-Spark mobility reward terms (off by default — weight 0 unless
+    # a preset opts in). Each is a NULL-safe linear term: s += value * w.get(key).
+    # A NULL feature or an absent/zero weight contributes nothing (weight*0), so
+    # no preset that ignores these keys changes its score. geodemo_diversity and
+    # intra_zone_share reward balanced-access / complete-neighbourhood liveability;
+    # weekend_hotspot_score rewards leisure access; night_share can penalise
+    # extreme night through-traffic in a 'lively but not noisy' preset.
+    for key in (
+        "geodemo_diversity", "intra_zone_share", "weekend_hotspot_score",
+        "leisure_share", "night_share",
+    ):
+        val = row.get(key)
+        if pd.notna(val):
+            s += float(val) * w.get(key, 0)
+
     return float(max(0.0, min(100.0, s)))
 
 

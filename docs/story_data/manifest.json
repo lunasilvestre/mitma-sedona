@@ -26,7 +26,24 @@
     "mitma_outflow_daily": 1.0,
     "mitma_through_ratio": 1.0,
     "motorway_within_500m": 1.0,
-    "industry_density_per_km2": 1.0
+    "industry_density_per_km2": 1.0,
+    "am_peak_share": 1.0,
+    "midday_share": 1.0,
+    "pm_peak_share": 1.0,
+    "night_share": 1.0,
+    "peak_hour_bucket": 1.0,
+    "weekend_weekday_ratio": 1.0,
+    "leisure_share": 1.0,
+    "commute_share": 1.0,
+    "weekend_hotspot_score": 1.0,
+    "mobility_typology": 1.0,
+    "intra_zone_share": 1.0,
+    "low_income_inflow_share": 1.0,
+    "youth_mobility_share": 1.0,
+    "senior_mobility_share": 1.0,
+    "female_share": 1.0,
+    "geodemo_diversity": 1.0,
+    "support_n": 1.0
   },
   "score_stats": {
     "default": {
@@ -86,5 +103,62 @@
     "bearing": 0
   },
   "source_basemap": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  "version": "v2"
+  "version": "v3-mobility",
+  "mobility_stats": {
+    "mitma_inflow_daily": {
+      "min": 4.0,
+      "50%": 41.0,
+      "max": 87049.0,
+      "mean": 494.176
+    },
+    "weekend_weekday_ratio": {
+      "min": 0.516,
+      "50%": 0.849,
+      "max": 1.351,
+      "mean": 0.877
+    },
+    "weekend_hotspot_score": {
+      "min": 0.707,
+      "50%": 1.288,
+      "max": 2.045,
+      "mean": 1.324
+    },
+    "leisure_share": {
+      "min": 0.114,
+      "50%": 0.495,
+      "max": 0.773,
+      "mean": 0.506
+    },
+    "geodemo_diversity": {
+      "min": 0.778,
+      "50%": 2.017,
+      "max": 3.628,
+      "mean": 2.035
+    },
+    "night_share": {
+      "min": 0.071,
+      "50%": 0.118,
+      "max": 0.2,
+      "mean": 0.121
+    }
+  },
+  "typology_counts": {
+    "commuter-dormitory": 25320,
+    "self-contained": 19900
+  },
+  "typology_labels": [
+    "commuter-dormitory",
+    "employment-sink",
+    "leisure-magnet",
+    "transit-corridor",
+    "self-contained",
+    "mixed-balanced"
+  ],
+  "typology_present": [
+    "commuter-dormitory",
+    "self-contained"
+  ],
+  "mobility_source": "dev2_bridge",
+  "mobility_window": "7 days, March 2024 (2024-03-04..10), distritos zoning",
+  "mobility_method": "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
 }
