@@ -226,10 +226,13 @@ def main() -> None:
     hexes_path = OUT / "hexes.json"
     hexes = json.loads(hexes_path.read_text(encoding="utf-8"))
     hx_df = pd.DataFrame(hexes)
-    # Drop the v2 naive-centroid flow columns; the dasymetric ones replace them.
-    for c in ("mitma_inflow_daily", "mitma_outflow_daily", "mitma_through_ratio"):
-        if c in hx_df.columns:
-            hx_df = hx_df.drop(columns=c)
+    # Drop EVERY mobility column we're about to (re)write — both the dasymetric
+    # flow columns and every other mobility scalar — so a re-export overwrites
+    # cleanly instead of colliding into pandas _x/_y suffixes. Only h3_id is the
+    # join key; all v2 (non-mobility) columns are preserved.
+    drop_cols = [c for c in mob.columns if c != "h3_id" and c in hx_df.columns]
+    if drop_cols:
+        hx_df = hx_df.drop(columns=drop_cols)
     merged = hx_df.merge(mob, on="h3_id", how="left")
     _dump(hexes_path, _records_nan_safe(merged))
     print(f"OK hexes.json: {len(merged):,} hexes, +{len(mob.columns) - 1} mobility cols")

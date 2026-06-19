@@ -43,7 +43,14 @@
     "senior_mobility_share": 1.0,
     "female_share": 1.0,
     "geodemo_diversity": 1.0,
-    "support_n": 1.0
+    "support_n": 1.0,
+    "female_of_all_trips": 1.0,
+    "youth_of_all_trips": 1.0,
+    "senior_of_all_trips": 1.0,
+    "low_income_of_all_trips": 1.0,
+    "sexo_coverage": 1.0,
+    "edad_coverage": 1.0,
+    "renta_coverage": 1.0
   },
   "score_stats": {
     "default": {
@@ -115,25 +122,25 @@
       "min": 0.516,
       "50%": 0.849,
       "max": 1.351,
-      "mean": 0.877
+      "mean": 0.876
     },
     "weekend_hotspot_score": {
       "min": 0.449,
-      "50%": 0.806,
+      "50%": 0.807,
       "max": 1.38,
-      "mean": 0.825
+      "mean": 0.826
     },
     "leisure_share": {
-      "min": 0.114,
+      "min": 0.117,
       "50%": 0.495,
       "max": 0.773,
-      "mean": 0.506
+      "mean": 0.507
     },
     "geodemo_diversity": {
-      "min": 0.54,
-      "50%": 1.398,
-      "max": 2.514,
-      "mean": 1.411
+      "min": 0.803,
+      "50%": 2.026,
+      "max": 3.705,
+      "mean": 2.051
     },
     "night_share": {
       "min": 0.071,
@@ -143,23 +150,20 @@
     }
   },
   "typology_counts": {
-    "commuter-dormitory": 6249,
-    "employment-sink": 11199,
-    "transit-corridor": 6399,
-    "self-contained": 6179,
-    "mixed-balanced": 15194
+    "commuter-corridor": 9291,
+    "transit-corridor": 11262,
+    "self-contained": 3343,
+    "mixed-balanced": 21324
   },
   "typology_labels": [
-    "commuter-dormitory",
-    "employment-sink",
+    "commuter-corridor",
     "leisure-magnet",
     "transit-corridor",
     "self-contained",
     "mixed-balanced"
   ],
   "typology_present": [
-    "commuter-dormitory",
-    "employment-sink",
+    "commuter-corridor",
     "transit-corridor",
     "self-contained",
     "mixed-balanced"
