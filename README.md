@@ -6,9 +6,9 @@
 [![spark](https://img.shields.io/badge/spark-4.1-orange.svg)](#)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[![Catalonia liveability geo-browser — 45,220 H3 res-8 hexes coloured by the
-liveability index over Esri satellite imagery, with the dark analysis panel on
-the left. Captured from docs/explore.html.](docs/screenshots/geobrowser_hero.png)](docs/explore.html)
+[![Catalonia liveability geo-browser — 45,220 H3 res-8 hexes extruded into a 3D
+liveability surface with glowing MITMA OD-flow arcs over Esri satellite imagery,
+beside the dark analysis panel. Captured from docs/explore.html.](docs/screenshots/geobrowser_hero.png)](docs/explore.html)
 
 > **Where in Catalonia could I live well?** Within bike-reach of a train station that connects to Barcelona, with climbing gyms and yoga nearby, close to green or sea, away from heavy industry and motorway noise — and breathing clean air, away from urban heat and light pollution, near biodiversity, with health amenities at hand.
 
