@@ -64,21 +64,30 @@ def main() -> None:
                     help="read the partitioned bronze lakehouse (pruned) instead of re-ingesting CSV")
     ap.add_argument("--fecha-start", default=None, help="YYYYMMDD window start (inclusive)")
     ap.add_argument("--fecha-end", default=None, help="YYYYMMDD window end (inclusive)")
-    ap.add_argument("--no-rtree", action="store_true",
-                    help="use the non-indexed RangeJoin (default: indexed R-tree BroadcastIndexJoin)")
+    ap.add_argument("--rtree", action="store_true",
+                    help="enable the indexed R-tree BroadcastIndexJoin (parks pyspark's "
+                         "jts-core). NOTE: incompatible with the bronze PARQUET read in the "
+                         "same JVM on this Spark/Sedona pair — the jts isolation breaks the "
+                         "parquet codegen (PrimitiveStringifier). The R-tree path is proven "
+                         "in isolation (see tests/notes); the integrated pipeline defaults to "
+                         "the correct non-indexed RangeJoin so it can read the lakehouse.")
     args = ap.parse_args()
 
     gold_dir = GOLD_ROOT / f"zoning={args.zoning}"
     gold_dir.mkdir(parents=True, exist_ok=True)
 
-    # Default to the proven indexed R-tree spatial join (review item 5); the
-    # crosswalk is the one heavy spatial join and benefits from the index at
-    # scale. --no-rtree falls back to the safe non-indexed RangeJoin.
+    # Default to the safe non-indexed RangeJoin: it reads the bronze parquet
+    # lakehouse correctly AND pushes ST_Intersects down (correct + fast on the
+    # 584-zone broadcast side). The indexed R-tree BroadcastIndexJoin is PROVEN
+    # to execute on the crosswalk in isolation (--rtree), but parking pyspark's
+    # duplicate jts-core to enable it breaks the parquet read codegen in the same
+    # JVM on this Spark-4.1.1/sedona-shaded-4.0 pair — so the integrated pipeline
+    # (which must scan parquet) stays on RangeJoin. See review item 5 notes.
     spark = get_sedona(app_name=f"mitma-pipeline-{args.zoning}",
                        driver_memory=args.driver_memory,
-                       enable_rtree=not args.no_rtree)
+                       enable_rtree=args.rtree)
     print(f"[spark] sedona.join.optimizationmode={spark.conf.get('sedona.join.optimizationmode')} "
-          f"(R-tree {'ON' if not args.no_rtree else 'off'})")
+          f"(R-tree {'ON' if args.rtree else 'off — RangeJoin, parquet-safe'})")
     spark.sparkContext.setLogLevel("ERROR")
 
     # ---- BRONZE ----------------------------------------------------------

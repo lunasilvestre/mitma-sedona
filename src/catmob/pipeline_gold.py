@@ -471,7 +471,11 @@ def mobility_typology(spark, indices_df: DataFrame, *, k: int = 5, seed: int = 4
         }
         for i in range(len(centers_std))
     ]
-    return labelled.select("h3_id", "cluster_id", "mobility_typology", *all_cols), centroids
+    # Carry the cluster features PLUS any descriptive columns present on the
+    # input (e.g. sink_source — kept for transparency though not a cluster axis).
+    extra = [c for c in indices_df.columns
+             if c not in ("h3_id", *all_cols) and c in labelled.columns]
+    return labelled.select("h3_id", "cluster_id", "mobility_typology", *all_cols, *extra), centroids
 
 
 def _name_clusters(centers_std, centers_raw, pop, feat_cols):
