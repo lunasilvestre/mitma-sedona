@@ -35,7 +35,7 @@
     "weekend_weekday_ratio": 1.0,
     "leisure_share": 1.0,
     "commute_share": 1.0,
-    "weekend_hotspot_score": 1.0,
+    "weekend_hotspot_score": 0.512,
     "mobility_typology": 1.0,
     "intra_zone_share": 1.0,
     "low_income_inflow_share": 1.0,
@@ -89,7 +89,7 @@
     "quiet_strict",
     "amenity_first"
   ],
-  "arc_count": 5000,
+  "arc_count": 250,
   "poi_categories": {
     "climbing": 219,
     "yoga": 67,
@@ -118,10 +118,10 @@
       "mean": 0.877
     },
     "weekend_hotspot_score": {
-      "min": 0.707,
-      "50%": 1.288,
-      "max": 2.045,
-      "mean": 1.324
+      "min": 0.449,
+      "50%": 0.806,
+      "max": 1.38,
+      "mean": 0.825
     },
     "leisure_share": {
       "min": 0.114,
@@ -130,10 +130,10 @@
       "mean": 0.506
     },
     "geodemo_diversity": {
-      "min": 0.778,
-      "50%": 2.017,
-      "max": 3.628,
-      "mean": 2.035
+      "min": 0.54,
+      "50%": 1.398,
+      "max": 2.514,
+      "mean": 1.411
     },
     "night_share": {
       "min": 0.071,
@@ -143,8 +143,11 @@
     }
   },
   "typology_counts": {
-    "commuter-dormitory": 25320,
-    "self-contained": 19900
+    "commuter-dormitory": 6249,
+    "employment-sink": 11199,
+    "transit-corridor": 6399,
+    "self-contained": 6179,
+    "mixed-balanced": 15194
   },
   "typology_labels": [
     "commuter-dormitory",
@@ -156,9 +159,12 @@
   ],
   "typology_present": [
     "commuter-dormitory",
-    "self-contained"
+    "employment-sink",
+    "transit-corridor",
+    "self-contained",
+    "mixed-balanced"
   ],
-  "mobility_source": "dev2_bridge",
+  "mobility_source": "dev1",
   "mobility_window": "7 days, March 2024 (2024-03-04..10), distritos zoning",
   "mobility_method": "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
 }
