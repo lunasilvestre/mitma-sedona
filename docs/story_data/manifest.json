@@ -35,7 +35,7 @@
     "weekend_weekday_ratio": 1.0,
     "leisure_share": 1.0,
     "commute_share": 1.0,
-    "weekend_hotspot_score": 0.512,
+    "weekend_hotspot_score": 1.0,
     "mobility_typology": 1.0,
     "intra_zone_share": 1.0,
     "low_income_inflow_share": 1.0,
@@ -114,46 +114,46 @@
   "mobility_stats": {
     "mitma_inflow_daily": {
       "min": 4.0,
-      "50%": 41.0,
-      "max": 87049.0,
-      "mean": 494.176
+      "50%": 42.0,
+      "max": 91809.0,
+      "mean": 527.368
     },
     "weekend_weekday_ratio": {
-      "min": 0.516,
-      "50%": 0.849,
-      "max": 1.351,
-      "mean": 0.876
+      "min": 0.565,
+      "50%": 0.914,
+      "max": 1.299,
+      "mean": 0.932
     },
     "weekend_hotspot_score": {
-      "min": 0.449,
-      "50%": 0.807,
-      "max": 1.38,
-      "mean": 0.826
+      "min": 0.492,
+      "50%": 0.915,
+      "max": 1.4,
+      "mean": 0.953
     },
     "leisure_share": {
-      "min": 0.117,
-      "50%": 0.495,
-      "max": 0.773,
-      "mean": 0.507
+      "min": 0.116,
+      "50%": 0.518,
+      "max": 0.793,
+      "mean": 0.517
     },
     "geodemo_diversity": {
-      "min": 0.803,
-      "50%": 2.026,
-      "max": 3.705,
-      "mean": 2.051
+      "min": 0.814,
+      "50%": 2.262,
+      "max": 3.563,
+      "mean": 2.223
     },
     "night_share": {
-      "min": 0.071,
-      "50%": 0.118,
-      "max": 0.2,
-      "mean": 0.121
+      "min": 0.082,
+      "50%": 0.128,
+      "max": 0.234,
+      "mean": 0.129
     }
   },
   "typology_counts": {
-    "commuter-corridor": 9291,
-    "transit-corridor": 11262,
-    "self-contained": 3343,
-    "mixed-balanced": 21324
+    "commuter-corridor": 7707,
+    "transit-corridor": 12044,
+    "self-contained": 7493,
+    "mixed-balanced": 17976
   },
   "typology_labels": [
     "commuter-corridor",
