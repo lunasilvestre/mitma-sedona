@@ -1,0 +1,72 @@
+[
+  {
+    "cluster_id": 0,
+    "label": "transit-corridor",
+    "intra_zone_share": 0.1523,
+    "leisure_share": 0.5443,
+    "commute_share": 0.0953,
+    "long_trip_share": 0.0817,
+    "_z": {
+      "intra_zone_share": -0.401,
+      "leisure_share": 0.327,
+      "commute_share": -0.311,
+      "long_trip_share": 0.569
+    }
+  },
+  {
+    "cluster_id": 1,
+    "label": "mixed-balanced",
+    "intra_zone_share": 0.4006,
+    "leisure_share": 0.4674,
+    "commute_share": 0.1221,
+    "long_trip_share": 0.0486,
+    "_z": {
+      "intra_zone_share": 1.165,
+      "leisure_share": -0.619,
+      "commute_share": 0.574,
+      "long_trip_share": -0.367
+    }
+  },
+  {
+    "cluster_id": 2,
+    "label": "commuter-corridor",
+    "intra_zone_share": 0.1081,
+    "leisure_share": 0.5321,
+    "commute_share": 0.1495,
+    "long_trip_share": 0.0361,
+    "_z": {
+      "intra_zone_share": -0.68,
+      "leisure_share": 0.177,
+      "commute_share": 1.477,
+      "long_trip_share": -0.721
+    }
+  },
+  {
+    "cluster_id": 3,
+    "label": "self-contained",
+    "intra_zone_share": 0.4183,
+    "leisure_share": 0.6181,
+    "commute_share": 0.0753,
+    "long_trip_share": 0.1062,
+    "_z": {
+      "intra_zone_share": 1.276,
+      "leisure_share": 1.234,
+      "commute_share": -0.972,
+      "long_trip_share": 1.264
+    }
+  },
+  {
+    "cluster_id": 4,
+    "label": "mixed-balanced",
+    "intra_zone_share": 0.1355,
+    "leisure_share": 0.445,
+    "commute_share": 0.0964,
+    "long_trip_share": 0.0365,
+    "_z": {
+      "intra_zone_share": -0.507,
+      "leisure_share": -0.894,
+      "commute_share": -0.275,
+      "long_trip_share": -0.711
+    }
+  }
+]
