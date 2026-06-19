@@ -103,26 +103,50 @@ ship at weight 0.)
    depends on it; doing the area math in a geographic CRS, or assuming 25831 on
    the raw 25830 source geometry, corrupts all weights.
 
-## R-tree / `BroadcastIndexJoin` status — deferred, not proven
+## R-tree / `BroadcastIndexJoin` status — PROVEN (with a parquet caveat)
 
-The crosswalk's `ST_Intersects` join *would* normally run as a Sedona
-`BroadcastIndexJoin` that builds an R-tree on the broadcast (zone) side. **On
-this sample it does not, and we do not claim otherwise.** The reusable session
-hard-sets `sedona.join.optimizationmode="none"` (`src/catmob/spark.py`):
+The crosswalk's `ST_Intersects` join runs as a Sedona `BroadcastIndexJoin` that
+builds an R-tree on the broadcast (zone) side. **This is now proven on this
+env**, and the precise blocker that previously defeated it is understood.
 
-> On this build (Spark 4.1.1 + `sedona-shaded-4.0`) the env ships two JTS copies
-> on different class loaders. The indexed `BroadcastIndexJoin` serialises a JTS
-> R-tree via Sedona's `IndexSerde` (shaded loader), which then calls the
-> package-private `AbstractSTRtree.getItemBoundables()` on an instance from the
-> *other* loader → `IllegalAccessError` during the broadcast spatial-index
-> serialize.
+**Root cause (diagnosed):** on this build (Spark 4.1.1 +
+`sedona-spark-shaded-4.0_2.13:1.9.0`) there are **two copies of `jts-core` on two
+class loaders** — the shaded Sedona jar bundles JTS *un-relocated* (at
+`org.locationtech.jts`) on the `--packages` `MutableURLClassLoader`, while
+pyspark *also* ships `jts-core-1.20.0.jar` on the `app` loader. The indexed
+`BroadcastIndexJoin` serialises a JTS R-tree via Sedona's `IndexSerde` (shaded
+loader), which then calls the *package-private*
+`AbstractSTRtree.getItemBoundables()` on an instance from the *other* loader →
+`IllegalAccessError` during the broadcast spatial-index serialize.
 
-With `optimizationmode="none"` Sedona falls back to a **correct non-indexed
-range join**; because the spatial side is tiny (584 zones vs ~tens of thousands
-of hexes, computed once) this is fast at sample scale and the closure is exact.
-**Re-enabling the R-tree (`sedona.join.optimizationmode="all"`) and proving a
-`BroadcastIndexJoin` actually runs is an atlas STAGE-0 task** (pin a matched
-JTS / shade the serde), not something demonstrated here.
+**Fix (proven):** park pyspark's duplicate `jts-core` jar *before the JVM
+launches* so the shaded jar's JTS is the only copy on the classpath
+(`catmob.spark._isolate_shaded_jts`, enabled by `get_sedona(enable_rtree=True)`,
+which also flips `sedona.join.optimizationmode="all"`; an `atexit` hook restores
+the jar). With this, the load-bearing crosswalk join executes with the plan
+markers `BroadcastIndexJoin` + `SpatialIndex … RTREE` and produces the same
+**exact closure** (`area_weight` sum/zone = 1.0000; 58,656 rows / 584 zones /
+46,121 hexes).
+
+Dead ends ruled out: pinning the pyspark jar onto
+`spark.{driver,executor}.extraClassPath` keeps two loaders (still fails);
+`spark.*.userClassPathFirst=true` breaks Sedona init with an slf4j
+`LinkageError`; the *unshaded* `sedona-spark-4.0` artifact additionally surfaces
+a `FoldableUnevaluable` `ClassNotFoundException` (the Spark-4.0-vs-4.1 API skew).
+
+**Caveat — why the integrated pipeline still defaults to the range join:**
+parking pyspark's `jts-core` to enable the R-tree breaks the **parquet read
+codegen** in the same JVM (`org.apache.parquet.schema.PrimitiveStringifier`
+fails to initialise). The crosswalk builds its geometry from the **GeoJSON**
+zones, so the R-tree path is proven there; but `run_mitma_pipeline.py` and
+`build_mitma_layers.py` must *scan the bronze parquet lakehouse*, which is
+incompatible with the jts-isolation in one JVM. They therefore default to the
+**correct non-indexed range join** (`optimizationmode="none"`) — fast at sample
+scale (584-zone broadcast side, computed once) with exact closure — and expose
+`--rtree` / `enable_rtree=True` for the geometry-only, parquet-free path. On
+atlas the clean resolution is a Spark/Sedona pair whose shaded jar **relocates**
+JTS (no app-loader collision), which removes both the `IllegalAccessError` and
+the parquet conflict at once.
 
 ## Scale reality (corrected)
 
@@ -147,27 +171,41 @@ reality:
 These are **relative indices and starting questions, not ground truth.**
 `weekend_hotspot_score`, `mobility_typology`, `geodemo_diversity` and the rhythm
 shares are *interpretable signals* over a 7-day sample — they tell you *where to
-look* (which hexes behave like sinks, corridors or dormitories; where weekend
-rhythm diverges from weekday), not a calibrated measurement. Min-support gates
-(`support_n`, the <100-device privacy floor) and NA-as-its-own-segment handling
-keep the indices honest; cross-zoning ratios are invalid (different expansion
-bases) and are never computed.
+look* (which hexes are self-contained, leisure magnets or transit corridors;
+where weekend rhythm diverges from weekday), not a calibrated measurement.
+Min-rows gates (`support_n` = the area-weighted **OD-segment row count**, a
+coarse density/confidence proxy) and NA-as-its-own-segment handling keep the
+indices honest; cross-zoning ratios are invalid (different expansion bases) and
+are never computed.
+
+**Risk — the privacy floor is invisible.** `support_n` is *not* the MITMA
+<100-device privacy gate. That suppression is applied by MITMA **before**
+publication, so the floor cannot be observed or reconstructed in the expanded
+open data; `support_n` only counts OD-segment rows behind each aggregate. Named
+geodemographic shares (`female_share`, `youth/senior_mobility_share`,
+`low_income_inflow_share`) are divided over the **known subset** for each
+variable (NA excluded from the denominator) and ship `*_of_all_trips` companions
+plus `*_coverage` NA-fractions so the unlabelled mass is explicit.
+`geodemo_diversity` is Shannon entropy in **bits** (log base 2).
 
 ## Full-scale staging (atlas)
 
-- **STAGE 0 (env hardening):** pin a matched Spark/Sedona pair to kill the
-  dual-JTS `IllegalAccessError`, then flip `sedona.join.optimizationmode` back to
-  `"all"` and **prove** a `BroadcastIndexJoin` runs on the crosswalk; pre-stage
-  the Maven jars so a cold start has no Maven Central dependency.
+- **STAGE 0 (env hardening):** the R-tree `BroadcastIndexJoin` is already proven
+  on this env via `get_sedona(enable_rtree=True)` (parks pyspark's duplicate
+  `jts-core`). The remaining atlas hardening is a Spark/Sedona pair whose shaded
+  jar **relocates** JTS, so the R-tree and the parquet scan coexist in one JVM
+  (no jts-isolation needed); pre-stage the Maven jars so a cold start has no
+  Maven Central dependency.
 - **STAGE 1–4:** sized incremental read by `zoning × kind × date-range` tranche →
   bronze; build the `zone_h3_xwalk` table once per zoning → silver; run the five
   gold themes **per zoning** (separate gold partitions — different expansion
   bases, cross-zoning ratios invalid).
-- **Guardrails:** never re-expand `viajes` (already population-expanded); honour
-  the <100-device privacy floor via `support_n` min-support gates; keep NA
-  `edad/sexo/renta` as their own segment; size partitions to executors (a naive
-  single-machine all-Spain hourly run will OOM — atlas with proper executors will
-  not).
+- **Guardrails:** never re-expand `viajes` (already population-expanded); apply
+  `support_n` min-ROWS gates as a density/confidence proxy (the <100-device
+  privacy floor is invisible in expanded open data — do not claim to honour it);
+  keep NA `edad/sexo/renta` as their own segment but divide named shares over the
+  known subset; size partitions to executors (a naive single-machine all-Spain
+  hourly run will OOM — atlas with proper executors will not).
 
 ## Keyless / static contract preserved
 
