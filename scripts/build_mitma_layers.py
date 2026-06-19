@@ -48,11 +48,12 @@ sys.path.insert(0, str(REPO / "src"))
 from pyspark.sql import functions as F  # noqa: E402
 from pyspark.sql import Window  # noqa: E402
 
+from catmob.pipeline_silver import build_zone_h3_xwalk  # noqa: E402  SINGLE SOURCE OF TRUTH
 from catmob.spark import get_sedona  # noqa: E402
 
 # --- paths ------------------------------------------------------------------
 BRONZE = REPO / "data" / "bronze" / "mitma_parquet" / "daily"   # hourly-grained, periodo col
-ZONES_SHP = REPO / "data" / "bronze" / "mitma" / "zones" / "zonificacion_distritos.shp"
+ZONES_GEOJSON = REPO / "data" / "bronze" / "mitma" / "zones" / "zonificacion_distritos.geojson"
 GOLD_V2 = REPO / "data" / "gold" / "h3_res8_catalonia_v2.parquet"   # 45,220 hex grid (h3_id, centroids)
 
 SILVER = REPO / "data" / "silver"
@@ -68,72 +69,39 @@ SRC_EPSG = "EPSG:25830"
 METRIC_EPSG = "EPSG:25831"
 
 ARC_TOP_N = 5000
-MIN_SUPPORT_TRIPS = 100.0   # MITMA privacy floor: OD pairs <100 devices suppressed.
+# A coarse min-rows gate on the OD-segment ROW COUNT behind each zone's weekend
+# stats — a density/confidence proxy, NOT the MITMA <100-device privacy gate
+# (that suppression is applied by MITMA before publication and is invisible in
+# the expanded open data).
+MIN_SUPPORT_ROWS = 100.0
 
 
 # ---------------------------------------------------------------------------
-# S1 — dasymetric zone->H3 crosswalk (the load-bearing Sedona spatial join)
+# S1 — dasymetric zone->H3 crosswalk (SINGLE SOURCE OF TRUTH)
 # ---------------------------------------------------------------------------
 def build_crosswalk(sedona):
     """Area-weighted zone->H3 crosswalk for the distritos zoning.
 
-    Hex grid is taken from the SHIPPED 45,220-hex gold so the crosswalk lands on
-    exactly the same cells the rest of the index uses (h3_id strings). Hex
-    polygons are materialised from the h3_id with ST_H3ToGeom; zone polygons come
-    from the distritos shapefile. BOTH are reprojected to EPSG:25831 before the
-    ST_Intersection/ST_Area area math. The small zoning side is BROADCAST.
+    CONVERGED (review item 6): this no longer re-derives the spatial join from
+    the shapefile. It delegates to
+    ``catmob.pipeline_silver.build_zone_h3_xwalk`` — the ONE canonical
+    dasymetric crosswalk (GeoJSON zones, ST_H3CellIDs fullCover grid, 4326->25831
+    metric area math, BROADCAST small side). The result is then RESTRICTED to the
+    shipped 45,220-hex gold grid so the layers land on exactly the h3 cells the
+    rest of the index uses.
 
-    Returns a DataFrame: (zone_id, h3_id, area_weight) where area_weight is the
-    fraction of the ZONE that falls in the hex (so SUM over hexes per zone ~1.0).
+    Returns a DataFrame: (zone_id, h3_id, area_weight).
     """
-    import geopandas as gpd
     import pandas as pd
 
-    # --- hex grid: h3_id -> polygon, via Sedona ST_H3ToGeom -------------------
-    hex_pdf = pd.read_parquet(GOLD_V2, columns=["h3_id"])
-    hexes = sedona.createDataFrame(hex_pdf)
-    # ST_H3ToGeom takes an array of H3 longs and returns an ARRAY<geometry>; the
-    # h3-py hex string id is base-16, so conv(...,16,10) -> the decimal long,
-    # cast to BIGINT, wrap in a 1-element array, take [0] for the hex polygon.
-    hexes = hexes.withColumn(
-        "hex_geom_4326",
-        F.expr("ST_H3ToGeom(array(cast(conv(h3_id, 16, 10) as bigint)))[0]"),
+    xwalk = build_zone_h3_xwalk(sedona, str(ZONES_GEOJSON), zoning="distritos").select(
+        "zone_id", "h3_id", "area_weight"
     )
-    hexes = hexes.withColumn(
-        "hex_m", F.expr(f"ST_Transform(ST_SetSRID(hex_geom_4326,4326), '{METRIC_EPSG}')")
-    ).select("h3_id", "hex_m")
-
-    # --- zone polygons: distritos shapefile, Catalonia only ------------------
-    zg = gpd.read_file(ZONES_SHP)[["ID", "geometry"]].rename(columns={"ID": "zone_id"})
-    zg["zone_id"] = zg["zone_id"].astype(str)
-    zg = zg[zg["zone_id"].str[:2].isin(["08", "17", "25", "43"])].reset_index(drop=True)
-    # Hand the WKT to Sedona; declare source SRID 25830 then transform to 25831.
-    zg["wkt"] = zg.geometry.to_wkt()
-    zpdf = pd.DataFrame({"zone_id": zg["zone_id"], "wkt": zg["wkt"]})
-    zones = sedona.createDataFrame(zpdf)
-    # ST_MakeValid: the distritos shapefile has self-touching rings / bad winding
-    # (geopandas warned on read), which throws JTS "non-noded intersection"
-    # TopologyException inside ST_Intersection. Make-valid before any area math.
-    zones = zones.withColumn(
-        "zone_m",
-        F.expr(
-            f"ST_MakeValid(ST_Transform(ST_SetSRID(ST_GeomFromText(wkt), {SRC_EPSG[5:]}), '{METRIC_EPSG}'))"
-        ),
-    ).select("zone_id", "zone_m", F.expr("ST_Area(zone_m) AS zone_area"))
-
-    # --- area-weighted spatial join (BROADCAST the small zoning side) --------
-    zones_b = F.broadcast(zones)
-    joined = hexes.join(
-        zones_b,
-        F.expr("ST_Intersects(hex_m, zone_m)"),
-    )
-    xwalk = joined.select(
-        "zone_id",
-        "h3_id",
-        F.expr(
-            "ST_Area(ST_Intersection(hex_m, zone_m)) / NULLIF(zone_area, 0) AS area_weight"
-        ),
-    ).where("area_weight > 0")
+    # Restrict to the shipped gold hex grid (string h3_id) so downstream joins
+    # land on the same cells the published index uses.
+    hex_pdf = pd.read_parquet(GOLD_V2, columns=["h3_id"]).drop_duplicates()
+    grid = sedona.createDataFrame(hex_pdf).select("h3_id")
+    xwalk = xwalk.join(F.broadcast(grid), "h3_id", "inner").where("area_weight > 0")
     return xwalk
 
 
@@ -144,8 +112,10 @@ def load_od_silver(sedona):
     """Read the hourly-grained bronze and enrich with weekday/is_weekend.
 
     viajes are population-expanded already — never re-expanded. support_n carries
-    a per-row presence count so downstream min-support gates can suppress the
-    MITMA privacy-floor noise. NA edad/sexo kept as their own explicit segment.
+    a per-row presence count so downstream min-rows gates can suppress sparse,
+    noisy aggregates (a density/confidence proxy, NOT the MITMA <100-device
+    privacy gate — that floor is invisible in the expanded open data). NA
+    edad/sexo kept as their own explicit segment.
     """
     df = sedona.read.parquet(str(BRONZE))
     df = (
@@ -278,7 +248,7 @@ def zone_weekend(od):
     out = out.withColumn(
         "weekend_hotspot_score",
         F.when(
-            F.col("wd_support") >= MIN_SUPPORT_TRIPS,
+            F.col("wd_support") >= MIN_SUPPORT_ROWS,
             F.col("weekend_weekday_ratio") * (1.0 + F.coalesce(F.col("leisure_share"), F.lit(0.0))),
         ),
     )

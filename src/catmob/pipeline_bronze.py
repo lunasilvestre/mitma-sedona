@@ -122,3 +122,48 @@ def ingest(
     df = read_viajes_csv(spark, paths, catalonia_only=catalonia_only)
     write_bronze(df, out_root, zoning=zoning, kind=kind)
     return df
+
+
+def read_bronze(
+    spark,
+    out_root: str,
+    *,
+    zoning: str = "distritos",
+    kind: str = "viajes",
+    fecha_start: str | None = None,
+    fecha_end: str | None = None,
+    catalonia_only: bool = True,
+):
+    """Read the bronze lakehouse partition-PRUNED to a Catalonia-touching window.
+
+    This is the SCALE-FILTER read path (review item 7): at full scale the bronze
+    lakehouse is the all-Spain dump, and reading it whole OOMs a single JVM. We
+    therefore push BOTH filters down to the scan so only the working set is
+    materialised — GB, not TB:
+
+      * ``fecha`` PARTITION PRUNING — only the ``[fecha_start, fecha_end]`` day
+        partitions are touched (the ``fecha=YYYYMMDD`` directories outside the
+        window are never opened). Pass an 8-char ``YYYYMMDD`` window.
+      * Catalonia-touching ROW FILTER — ``origen`` OR ``destino`` distrito
+        prefix in 08/17/25/43, a pushed-down predicate.
+      * ``zoning`` / ``kind`` partition filters select the right sub-table.
+
+    On the 7-day sample the window spans the whole table (no-op pruning), but the
+    SAME code on atlas reads only the requested days of the all-Spain lakehouse.
+    """
+    df = (
+        spark.read.parquet(out_root.rstrip("/"))
+        .where(F.col("zoning") == zoning)
+        .where(F.col("kind") == kind)
+    )
+    if fecha_start is not None:
+        df = df.where(F.col("fecha") >= fecha_start)
+    if fecha_end is not None:
+        df = df.where(F.col("fecha") <= fecha_end)
+    if catalonia_only:
+        df = df.where(
+            "substring(origen,1,2) IN ('08','17','25','43') "
+            "OR substring(destino,1,2) IN ('08','17','25','43')"
+        )
+    df = df.withColumn("periodo", F.col("periodo").cast("int"))
+    return df

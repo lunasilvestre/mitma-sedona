@@ -66,18 +66,24 @@ MOBILITY_SCALAR_COLS = [
     "weekend_weekday_ratio", "leisure_share", "commute_share", "weekend_hotspot_score",
     # typology + self-containment
     "mobility_typology", "intra_zone_share",
-    # geodemographic
+    # geodemographic — honest KNOWN-subset shares + transparency companions
     "low_income_inflow_share", "youth_mobility_share", "senior_mobility_share",
     "female_share", "geodemo_diversity",
-    # confidence
+    "female_of_all_trips", "youth_of_all_trips", "senior_of_all_trips",
+    "low_income_of_all_trips",
+    "sexo_coverage", "edad_coverage", "renta_coverage",
+    # density / confidence proxy (OD-segment row count — NOT the privacy gate)
     "support_n",
 ]
 
 # Fixed label->meaning order for the typology legend (manifest + browser). Must
 # stay in sync with CATEGORICAL.mobility_typology in docs/app/geobrowser-map.js.
+# Data-driven labels: the sink/source pair was dropped (sink_source range too
+# narrow at daily distrito resolution to support it); commuter-corridor (high
+# work/study pull) replaces it.
 TYPOLOGY_LABELS = [
-    "commuter-dormitory", "employment-sink", "leisure-magnet",
-    "transit-corridor", "self-contained", "mixed-balanced",
+    "commuter-corridor", "leisure-magnet", "transit-corridor",
+    "self-contained", "mixed-balanced",
 ]
 
 
@@ -125,7 +131,10 @@ def _round_mobility(df: pd.DataFrame) -> None:
     for c in ("am_peak_share", "midday_share", "pm_peak_share", "night_share",
               "leisure_share", "commute_share", "intra_zone_share",
               "low_income_inflow_share", "youth_mobility_share",
-              "senior_mobility_share", "female_share"):
+              "senior_mobility_share", "female_share",
+              "female_of_all_trips", "youth_of_all_trips", "senior_of_all_trips",
+              "low_income_of_all_trips",
+              "sexo_coverage", "edad_coverage", "renta_coverage"):
         if c in df:
             df[c] = df[c].round(3)
 

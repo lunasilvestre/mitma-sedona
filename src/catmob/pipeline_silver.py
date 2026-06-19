@@ -172,9 +172,12 @@ def build_od_silver(bronze_df):
 
     Adds:
       * ``weekday`` (1=Sun..7=Sat per Spark ``dayofweek``) and ``is_weekend``.
-      * ``support_n`` = 1 per OD-segment row (carried so downstream SUM gives a
-        trip-row count behind each aggregate — the privacy-floor confidence
-        proxy).
+      * ``support_n`` = 1 per OD-segment row. Downstream SUM gives the
+        OD-SEGMENT ROW COUNT behind each aggregate — a coarse density /
+        confidence proxy (more rows ≈ denser, more reliable aggregate). It is
+        NOT the MITMA <100-device privacy gate: that suppression is applied by
+        MITMA *before* publication, so the privacy floor is INVISIBLE in the
+        expanded open data and cannot be recovered here.
     Keeps NA edad/sexo/renta as the literal string 'NA' (never dropped).
     Never re-expands viajes (already population-expanded).
     """

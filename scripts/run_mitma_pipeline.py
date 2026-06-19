@@ -55,6 +55,15 @@ def main() -> None:
     ap.add_argument("--min-support", type=int, default=50)
     ap.add_argument("--regression", action="store_true")
     ap.add_argument("--driver-memory", default="8g")
+    # SCALE-FILTER (review item 7): read the bronze lakehouse partition-pruned to
+    # a Catalonia-touching [fecha_start, fecha_end] window instead of re-ingesting
+    # the CSV glob. On atlas this keeps the working set GB-scale, not the
+    # all-Spain TB dump. --from-bronze skips CSV ingest and reads the parquet
+    # lakehouse with fecha partition pruning.
+    ap.add_argument("--from-bronze", action="store_true",
+                    help="read the partitioned bronze lakehouse (pruned) instead of re-ingesting CSV")
+    ap.add_argument("--fecha-start", default=None, help="YYYYMMDD window start (inclusive)")
+    ap.add_argument("--fecha-end", default=None, help="YYYYMMDD window end (inclusive)")
     args = ap.parse_args()
 
     gold_dir = GOLD_ROOT / f"zoning={args.zoning}"
@@ -64,8 +73,21 @@ def main() -> None:
     spark.sparkContext.setLogLevel("ERROR")
 
     # ---- BRONZE ----------------------------------------------------------
-    print(f"[bronze] ingesting {args.sample_glob}")
-    bronze = B.ingest(spark, args.sample_glob, BRONZE_ROOT, zoning=args.zoning, kind="viajes")
+    if args.from_bronze:
+        print(f"[bronze] reading lakehouse {BRONZE_ROOT} "
+              f"(window={args.fecha_start}..{args.fecha_end}, Catalonia-touching, partition-pruned)")
+        bronze = B.read_bronze(
+            spark, BRONZE_ROOT, zoning=args.zoning, kind="viajes",
+            fecha_start=args.fecha_start, fecha_end=args.fecha_end,
+        )
+    else:
+        print(f"[bronze] ingesting {args.sample_glob}")
+        bronze = B.ingest(spark, args.sample_glob, BRONZE_ROOT, zoning=args.zoning, kind="viajes")
+        if args.fecha_start or args.fecha_end:
+            if args.fecha_start:
+                bronze = bronze.where(F.col("fecha") >= args.fecha_start)
+            if args.fecha_end:
+                bronze = bronze.where(F.col("fecha") <= args.fecha_end)
     n_bronze = bronze.count()
     fechas = sorted(r["fecha"] for r in bronze.select("fecha").distinct().collect())
     per_day = bronze.groupBy("fecha").count().orderBy("fecha").collect()
@@ -135,8 +157,7 @@ def main() -> None:
         .join(geodemo, "h3_id", "left")
         .join(typ.select(
             "h3_id", "mobility_typology", "cluster_id",
-            "intra_zone_share", "long_trip_share",
-            "commute_minus_leisure", "sink_source"
+            "intra_zone_share", "long_trip_share", "sink_source",
         ), "h3_id", "left")
     )
     feats_pd = feats.toPandas()
