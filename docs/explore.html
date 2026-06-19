@@ -362,9 +362,9 @@ const METRIC_CAPTIONS = {
     "sink (people arrive and stay); above 0 = a source (people leave). Descriptive (neutral) " +
     "— diverging ramp pivots at 0.0. v3: recomputed via the Sedona area-weighted crosswalk.",
   // === v3 MITMA deep-Spark mobility layers ===
-  mobility_typology: "Each hex's mobility CLASS from a Spark MLlib BisectingKMeans over " +
-    "interpretable indices (sink/source, self-containment, long-trip share, leisure vs " +
-    "commute). Categorical — colour = class, not magnitude. Built from the full hourly OD " +
+  mobility_typology: "Each hex's mobility CLASS from a Spark MLlib KMeans over " +
+    "interpretable indices (self-containment, long-trip share, leisure share, commute " +
+    "share). Categorical — colour = class, not magnitude. Built from the full hourly OD " +
     "cube, disaggregated to hexes via the Sedona dasymetric crosswalk.",
   peak_hour_bucket: "When each hex's inflow peaks (MAX_BY over the 24h profile): morning / " +
     "midday / evening / night. Categorical. Sharp morning/evening hexes are commuter-tidal; " +

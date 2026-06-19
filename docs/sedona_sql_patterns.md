@@ -224,13 +224,16 @@ small side, which builds an R-tree per executor on the broadcast hexes.
 > spatial join** — they reach the H3 grid through a cheap broadcast
 > *equi*-join on `zone_id`. The one spatial join is the **one-time
 > crosswalk build** (584 distrito polygons vs the H3 grid in
-> `pipeline_silver.py`). And on the current build the indexed
-> `BroadcastIndexJoin` above is **not** active: `src/catmob/spark.py` sets
-> `sedona.join.optimizationmode="none"` to dodge a dual-JTS
-> `IllegalAccessError` (Spark 4.1.1 + sedona-shaded-4.0), falling back to a
-> correct non-indexed range join. Flipping it back to `"all"` and proving
-> the R-tree path is an atlas STAGE-0 task — see
-> [why_spark_sedona.md](why_spark_sedona.md).
+> `pipeline_silver.py`). The indexed `BroadcastIndexJoin` above **is proven**
+> on this env via `get_sedona(enable_rtree=True)`, which parks pyspark's
+> duplicate `jts-core` jar (dual-JTS `IllegalAccessError` fix) and flips
+> `sedona.join.optimizationmode="all"`: the crosswalk join then runs as a
+> `BroadcastIndexJoin` + `SpatialIndex … RTREE` with exact closure (58,656
+> rows / 584 zones / 46,121 hexes). The **integrated** pipeline still defaults
+> to `optimizationmode="none"` (correct non-indexed range join) because parking
+> the jar breaks the bronze-parquet read codegen in the same JVM; the clean
+> atlas fix is a shaded jar that *relocates* JTS so the R-tree and the parquet
+> scan coexist — see [why_spark_sedona.md](why_spark_sedona.md).
 
 > **AQE caveat (SEDONA-56):** broadcast spatial joins historically failed
 > under Spark AQE; the 1.7+ `RangeJoinExec` rework fixed it but if you see

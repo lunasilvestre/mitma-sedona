@@ -6,7 +6,7 @@
 > path, driven through one reusable session (`src/catmob/spark.py:get_sedona`)
 > — not by pandas. This note records the operations where Sedona/Spark is
 > load-bearing, **reads its numbers straight from the shipped gold**
-> (`data/gold/mitma_features/zoning=distritos/` — 46,121 hexes × 29 columns),
+> (`data/gold/mitma_features/zoning=distritos/` — 46,121 hexes × 35 columns),
 > and states the R-tree / `BroadcastIndexJoin` status honestly.
 
 ## What is actually load-bearing (and what is NOT)
@@ -90,14 +90,23 @@ ship at weight 0.)
    unchanged.
 
 5. **Spark MLlib `KMeans` typology clustering** — the `mobility_typology` label
-   comes from standardising an interpretable per-zone vector (sink/source =
-   `log(outflow/inflow)`, intra-zone share, long-trip share, commute vs leisure
-   share) with `StandardScaler`, then **`KMeans` (k-means‖)**
-   (`pipeline_gold.py`). KMeans is what ships because BisectingKMeans on this
-   scaled vector intermittently collapsed to a single cluster. The shipped gold
-   carries **5 typologies**: `mixed-balanced` (15,418 hexes), `employment-sink`
-   (11,298), `transit-corridor` (6,582), `commuter-dormitory` (6,422),
-   `self-contained` (6,401).
+   comes from standardising an interpretable per-zone vector
+   (`TYPOLOGY_FEATURES` = `intra_zone_share`, `leisure_share`, `commute_share`,
+   `long_trip_share`) with `StandardScaler`, then **`KMeans` (k-means‖)** with
+   `k=5` (`pipeline_gold.py`). KMeans is what ships because BisectingKMeans on
+   this scaled vector intermittently collapsed to a single cluster. `sink_source`
+   = `log(outflow/inflow)` is deliberately *not* a cluster axis — on this
+   daily-distrito sample it spans only ≈ −0.075…0.033, too narrow to support an
+   `employment-sink`/`commuter-dormitory` split — so it is carried as a
+   descriptive column only. Labels are assigned from the **actual cluster
+   centroids** (strongest |z|-score pole, `|z| ≥ 0.5` gate, else `mixed-balanced`).
+   The shipped gold's 5 KMeans clusters resolve to **4 distinct, data-driven
+   typologies**: `mixed-balanced` (21,846 hexes; two centroids land near the
+   origin), `transit-corridor` (11,410; `long_trip` z ≈ +1.14), `commuter-corridor`
+   (9,406; `commute` z ≈ +1.34), `self-contained` (3,459; `intra_zone` z ≈ +2.03).
+   `leisure-magnet` is a legitimately *unassigned* pole — no cluster has leisure
+   as its strongest axis — which is the honest, non-fabricated outcome, not a
+   missing label.
 
 6. **`ST_Transform` to EPSG:25831 metric reprojection** — every area weight
    depends on it; doing the area math in a geographic CRS, or assuming 25831 on

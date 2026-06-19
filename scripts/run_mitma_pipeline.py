@@ -154,7 +154,7 @@ def main() -> None:
     print("[gold] theme 3: geodemographic")
     geodemo = G.geodemographic(od_silver, xwalk)
 
-    print("[gold] theme 4: typology (MLlib BisectingKMeans)")
+    print("[gold] theme 4: typology (MLlib KMeans)")
     indices = G.typology_indices(od_silver, xwalk).persist()
     typ, centroids = G.mobility_typology(spark, indices, k=args.k)
 

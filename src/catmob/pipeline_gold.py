@@ -9,7 +9,7 @@ Themes (each a function returning a per-hex DataFrame keyed by ``h3_id``):
   * :func:`dasymetric_inflow_outflow` — corrected mitma_inflow/outflow/through_ratio
   * :func:`hourly_rhythm`            — 24h profile + am/pm/midday/night shares + peak bucket
   * :func:`weekend_hotspots`         — weekend/weekday ratio + leisure share + support
-  * :func:`mobility_typology`        — interpretable indices -> MLlib BisectingKMeans label
+  * :func:`mobility_typology`        — interpretable indices -> MLlib KMeans label
   * :func:`geodemographic`           — segment-weighted shares + renta x edad entropy
   * :func:`od_arcs`                  — top-N inter-zone arcs (ST_MakeLine), browser-ready
 
