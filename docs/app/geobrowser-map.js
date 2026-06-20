@@ -113,6 +113,11 @@
     }
   };
 
+  // POIs are point-level OSM amenities, hidden below this zoom so they don't
+  // smear into an unreadable dot-cloud at region scale. The number is shared by
+  // the _poiLayers z-gate AND the inline "zoom in to reveal" hint (FIX 2).
+  var POI_ZOOM_GATE = 10.5;
+
   // OSM-domain colours for POIs (dark/satellite adapted, spec §8).
   var POI_COLORS = {
     climbing: [150, 110, 70],   // brown (sport)
@@ -373,6 +378,12 @@
     this.deck = null;    // deck.gl overlay
     this._hexes = [];
     this._arcs = null;
+    // OD-arc width domain over log10(flow+1), computed once when arcs.json loads.
+    // arcs.json holds MILLION-scale flow values, so a raw log scale lands every
+    // arc in a ~10.6–12.4px band (a uniform fat tangle); we instead map the
+    // measured [logMin,logMax] linearly into ~1.5–8px for a thin->thick gradient.
+    this._arcLogMin = null;
+    this._arcLogMax = null;
     this._pois = null;
     this._rhythm = null;   // lazy-loaded h3_id -> [24 floats] (hover sparkline)
     this._seasons = null;  // lazy-loaded h3_id -> {feb:{...},may,jun} (season sidecar)
@@ -536,8 +547,9 @@
             pitch: params.viewState.pitch
           });
         }
-        // POIs are zoom-gated; re-render when crossing the threshold.
-        if (self._layersOn.pois) { self._scheduleRender(); }
+        // POIs are zoom-gated; re-render when crossing the threshold and refresh
+        // the inline "zoom in to reveal" hint so it auto-clears past the gate.
+        if (self._layersOn.pois) { self._scheduleRender(); self._updatePoiHint(); }
       },
       getTooltip: function (info) { return self._tooltip(info); },
       layers: []
@@ -660,7 +672,8 @@
     }
     if (this._layersOn.arcs && this._arcs) {
       var al = this._arcLayer();
-      if (al) { layers.push(al); }
+      // _arcLayer returns [glowLayer, arcLayer] (glow underlay + crisp arcs).
+      if (al) { layers = layers.concat(al); }
     }
     if (this._layersOn.pois && this._pois) {
       var pls = this._poiLayers();
@@ -738,24 +751,70 @@
     });
   };
 
+  // Scan arcs.json once for the log10(flow+1) range. arcs.json now holds
+  // MILLION-scale flow values (measured ~807k–7.87M → logMin ≈ 5.907,
+  // logMax ≈ 6.896), so the raw log scale would clamp every arc into a fat
+  // ~10.6–12.4px band. We capture the live min/max here and map it linearly
+  // into ~1.5–8px in getWidth (see _arcWidth), so the look survives if the
+  // arc set is later regenerated with a different flow magnitude.
+  GeoBrowser.prototype._computeArcDomain = function () {
+    var data = this._arcs || [];
+    var lo = Infinity, hi = -Infinity;
+    for (var i = 0; i < data.length; i++) {
+      var f = data[i].flow || 1;
+      var l = Math.log10(f + 1);
+      if (l < lo) { lo = l; }
+      if (l > hi) { hi = l; }
+    }
+    // Fallback to the measured Catalonia domain if arcs.json is empty/degenerate.
+    this._arcLogMin = (lo === Infinity) ? 5.907 : lo;
+    this._arcLogMax = (hi === -Infinity || hi === lo) ? this._arcLogMin + 1 : hi;
+  };
+
+  // Map a single arc's flow into a delicate 1.5–8px width via the log domain.
+  GeoBrowser.prototype._arcWidth = function (d) {
+    var lo = this._arcLogMin, hi = this._arcLogMax;
+    if (lo == null) { this._computeArcDomain(); lo = this._arcLogMin; hi = this._arcLogMax; }
+    var l = Math.log10((d.flow || 1) + 1);
+    var t = clamp01((l - lo) / ((hi - lo) || 1));
+    return 1.5 + t * 6.5; // thin (weak corridor) -> thick (strongest corridor)
+  };
+
   GeoBrowser.prototype._arcLayer = function () {
+    var self = this;
     var data = this._arcs || [];
     if (!data.length) { return null; }
-    return new deck.ArcLayer({
-      id: 'arcs',
+    if (this._arcLogMin == null) { this._computeArcDomain(); }
+    var common = {
       data: data,
-      pickable: true,
-      greatCircle: false,
+      // greatCircle + a getHeight arch turns the flat hops back into tall
+      // great-circle bridges (the original MITMA OD look, regression e05db0d).
+      greatCircle: true,
+      getHeight: 0.4,
       getSourcePosition: function (d) { return [d.source_lon, d.source_lat]; },
       getTargetPosition: function (d) { return [d.target_lon, d.target_lat]; },
-      getSourceColor: [0, 220, 255, 190],   // cyan
-      getTargetColor: [255, 0, 200, 190],    // magenta
-      getWidth: function (d) {
-        var f = d.flow || 1;
-        return Math.max(1, Math.log10(f + 1) * 1.8);
-      },
       widthUnits: 'pixels'
-    });
+    };
+    // Subtle glow underlay: a wider, low-alpha twin of each arc so the bright
+    // arcs read against the satellite/dark basemap without clogging.
+    var glow = new deck.ArcLayer(Object.assign({}, common, {
+      id: 'arcs-glow',
+      pickable: false,
+      getSourceColor: [0, 220, 255, 45],
+      getTargetColor: [255, 0, 200, 45],
+      getWidth: function (d) { return self._arcWidth(d) + 3; },
+      updateTriggers: { getWidth: [this._arcLogMin, this._arcLogMax] }
+    }));
+    var arcs = new deck.ArcLayer(Object.assign({}, common, {
+      id: 'arcs',
+      pickable: true,
+      getSourceColor: [0, 220, 255, 200],   // cyan
+      getTargetColor: [255, 0, 200, 200],    // magenta
+      getWidth: function (d) { return self._arcWidth(d); },
+      updateTriggers: { getWidth: [this._arcLogMin, this._arcLogMax] }
+    }));
+    // Return both as a compound (glow under, crisp arcs on top).
+    return [glow, arcs];
   };
 
   // POIs: one ScatterplotLayer per category so each carries its domain colour
@@ -763,7 +822,7 @@
   GeoBrowser.prototype._poiLayers = function () {
     var pois = this._pois || {};
     var z = this._viewState.zoom || 8;
-    if (z < 10.5) { return []; }
+    if (z < POI_ZOOM_GATE) { return []; }
     var layers = [];
     Object.keys(pois).forEach(function (cat) {
       var rows = pois[cat] || [];
@@ -787,6 +846,49 @@
       }));
     });
     return layers;
+  };
+
+  // ---- OSM-amenities zoom-gate hint (FIX 2) ---------------------------------
+  // The POI layer is correctly z-gated (<POI_ZOOM_GATE it renders nothing), but
+  // toggling the checkbox ON while zoomed out gives NO feedback, so it looks
+  // broken. We surface a small inline hint next to the OSM-amenities control and
+  // auto-clear it once the user zooms past the gate. We do NOT hijack the camera.
+  // The hint reuses the existing `.dyn-hint` caption style from explore.css.
+  GeoBrowser.prototype._poiHintEl = function () {
+    if (this._poiHint) { return this._poiHint; }
+    var doc = global.document;
+    if (!doc) { return null; }
+    var toggle = doc.getElementById('toggle-pois');
+    if (!toggle) { return null; }
+    // Mount inside the same .layer-row as the OSM-amenities checkbox, after the
+    // existing caption, so it sits where the user is looking.
+    var row = toggle.closest ? toggle.closest('.layer-row') : null;
+    var el = doc.createElement('p');
+    el.className = 'dyn-hint';
+    el.id = 'pois-zoom-hint';
+    el.setAttribute('role', 'status');
+    (row || toggle.parentNode).appendChild(el);
+    this._poiHint = el;
+    return el;
+  };
+
+  // Refresh the hint to match (pois layer on?) x (zoomed past the gate?).
+  GeoBrowser.prototype._updatePoiHint = function () {
+    var el = this._poiHintEl();
+    if (!el) { return; }
+    var z = this._viewState.zoom || 8;
+    var show = this._layersOn.pois && z < POI_ZOOM_GATE;
+    if (show) {
+      var pois = this._pois || {};
+      var n = 0;
+      Object.keys(pois).forEach(function (k) { n += (pois[k] || []).length; });
+      var count = n || 322; // measured point-level amenity count
+      el.textContent = 'Zoom in past z' + POI_ZOOM_GATE + ' to reveal the ' +
+        count + ' point-level amenities.';
+      el.classList.add('is-on');
+    } else {
+      el.classList.remove('is-on');
+    }
   };
 
   // ---- Tooltip ---------------------------------------------------------------
@@ -1004,15 +1106,17 @@
     this._layersOn[key] = !!on;
     if (on && key === 'arcs' && !this._arcs) {
       return this._fetchJson(this.dataBase + 'arcs.json')
-        .then(function (d) { self._arcs = d || []; self._render(); })
+        .then(function (d) { self._arcs = d || []; self._computeArcDomain(); self._render(); })
         .catch(function (e) { self._layersOn.arcs = false; throw e; });
     }
     if (on && key === 'pois' && !this._pois) {
       return this._fetchJson(this.dataBase + 'pois.json')
-        .then(function (d) { self._pois = d || {}; self._render(); })
+        .then(function (d) { self._pois = d || {}; self._render(); self._updatePoiHint(); })
         .catch(function (e) { self._layersOn.pois = false; throw e; });
     }
     this._render();
+    // Keep the OSM-amenities zoom hint in sync on every pois toggle (clears on off).
+    if (key === 'pois') { this._updatePoiHint(); }
     return Promise.resolve();
   };
 
