@@ -127,6 +127,14 @@
 
   function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
 
+  // Optional per-field non-linear domain transforms (opt-in via FIELDS
+  // `domainTransform`). Applied only inside _normalise to reshape the colour
+  // mapping; the legend keeps the raw min/max. log1p handles zero-heavy,
+  // long-tailed sequential fields so moderate values don't crush to black.
+  var DOMAIN_TRANSFORMS = {
+    log1p: function (x) { return Math.log1p(Math.max(0, x)); }
+  };
+
   // Stable fallback palette for categorical labels not in CATEGORICAL[column]
   // (e.g. a cluster suffix variant 'self-contained-2' the pipeline may emit).
   var CAT_FALLBACK = [
@@ -185,8 +193,10 @@
     },
     mitma_through_ratio: {
       column: 'mitma_through_ratio', ramp: 'RdBu', label: 'Through-ratio (sink ↔ source)',
-      // v3 dasymetric: now log(outflow/inflow), so the natural pivot is 0.0.
-      kind: 'diverging', goodWhen: 'neutral', pivot: 0.0, unit: '', lowLabel: 'sink', highLabel: 'source'
+      // Exported as a RAW outflow/inflow ratio centred at 1.0 (sink<1, source>1),
+      // so the diverging ramp must pivot on 1.0 (pivot 0.0 collapsed the whole
+      // dataset onto the top sliver of the RdBu ramp -> uniform maroon).
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'sink', highLabel: 'source'
     },
     // === v3 MITMA deep-Spark mobility layers (Sedona dasymetric crosswalk) ===
     am_peak_share: {
@@ -331,7 +341,12 @@
     },
     biodiversity_obs_density: {
       column: 'biodiversity_obs_density', ramp: 'viridis', label: 'Biodiversity obs density (/km²)',
-      kind: 'sequential', goodWhen: 'high', unit: ' /km²', lowLabel: 'few', highLabel: 'many'
+      // 86% zeros with a huge outlier (max ~3199, mean ~1.37): a linear [0,max]
+      // domain crushes every moderate density to near-black. log1p compresses the
+      // outlier so mid/high values separate visually from zero. Legend still shows
+      // the raw min/max — the transform only reshapes the colour mapping.
+      kind: 'sequential', goodWhen: 'high', unit: ' /km²', lowLabel: 'few', highLabel: 'many',
+      domainTransform: 'log1p'
     },
     no2_ugm3: {
       column: 'no2_ugm3', ramp: 'magma', label: 'NO₂ annual mean (µg/m³)',
@@ -657,8 +672,16 @@
       var half = Math.max(pivot - dom[0], dom[1] - pivot) || 1;
       t = clamp01(0.5 + (v - pivot) / (2 * half));
     } else {
-      var lo = dom[0], span = (dom[1] - dom[0]) || 1;
-      t = clamp01((v - lo) / span);
+      // Optional per-field non-linear remap of the colour mapping ONLY. We
+      // transform v and the domain endpoints at normalise time (NOT in _domain),
+      // so the legend keeps showing the honest raw min/max. log1p de-crushes
+      // sequential fields dominated by zeros + a long tail (biodiversity density).
+      var xf = DOMAIN_TRANSFORMS[field.domainTransform];
+      var lo = xf ? xf(dom[0]) : dom[0];
+      var hi = xf ? xf(dom[1]) : dom[1];
+      var vv = xf ? xf(v) : v;
+      var span = (hi - lo) || 1;
+      t = clamp01((vv - lo) / span);
     }
     return lowGood ? 1 - t : t; // low-is-good metrics: invert so good = bright
   };

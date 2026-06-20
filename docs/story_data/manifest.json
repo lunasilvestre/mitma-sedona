@@ -98,7 +98,7 @@
     "quiet_strict",
     "amenity_first"
   ],
-  "arc_count": 250,
+  "arc_count": 5000,
   "poi_categories": {
     "climbing": 219,
     "yoga": 67,

@@ -687,20 +687,29 @@ def _name_clusters(centers_std, centers_raw, pop, feat_cols):
 # Theme 5 — OD arcs via Sedona ST_MakeLine
 # ---------------------------------------------------------------------------
 
-def od_arcs(spark, od_daily_df: DataFrame, zones_geojson_path: str, *, top_n: int = 250,
+def od_arcs(spark, od_daily_df: DataFrame, zones_geojson_path: str, *, top_n: int = 5000,
             weekend_only: bool | None = None, id_field: str = "ID"):
     """Top-N inter-zone OD arcs as ST_MakeLine(centroid(o), centroid(d)).
 
     Returns a list of dicts in the existing arcs.json shape:
-    ``{source:[lon,lat], target:[lon,lat], value:viajes}``.
+    ``{source:[lon,lat], target:[lon,lat], value:trips_per_day}``.
+
+    ``value`` is expressed in **trips/day** — the windowed SUM of ``viajes``
+    divided by the number of distinct ``fecha`` days in the window — mirroring
+    the export's ``_build_arcs`` semantics so a Spark re-run can't silently
+    re-introduce raw-window-sum / top-250 arc regressions.
     """
     df = od_daily_df.where("origen <> destino")
     if weekend_only is True:
         df = df.where("is_weekend = true")
     elif weekend_only is False:
         df = df.where("is_weekend = false")
+    # Distinct-day divisor (mirror dasymetric_inflow_outflow): windowed SUM of
+    # viajes -> trips/day so the unit matches the export + tooltip/caption.
+    n_days = df.select("fecha").distinct().count() or 1
     pairs = (
-        df.groupBy("origen", "destino").agg(F.sum("viajes").alias("viajes"))
+        df.groupBy("origen", "destino")
+        .agg((F.sum("viajes") / F.lit(n_days)).alias("viajes"))
         .orderBy(F.desc("viajes")).limit(top_n)
     )
     pairs.createOrReplaceTempView("_arc_pairs")

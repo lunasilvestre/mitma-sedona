@@ -708,14 +708,14 @@
     {
       "id": "ARC-001-arcs-on-load-render",
       "slice": "arcs-amenities-opacity",
-      "description": "MITMA OD arcs ON: lazy-fetch arcs.json (250 arcs), ArcLayer added to deck, non-blank. Proves the layer loads + renders end to end.",
+      "description": "MITMA OD arcs ON: lazy-fetch arcs.json (5000 arcs), ArcLayer added to deck, non-blank. Proves the layer loads + renders end to end.",
       "steps": [
         { "action": "goto", "value": "", "wait": 1200 },
         { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
         { "action": "screenshot", "value": "arc-on" },
-        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 5000, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
       ],
-      "pass_criteria": "arcs.json fetched (250), ArcLayer present in deck.props.layers, non-blank, checkbox stayed checked (no fetch revert), no errors."
+      "pass_criteria": "arcs.json fetched (5000), ArcLayer present in deck.props.layers, non-blank, checkbox stayed checked (no fetch revert), no errors."
     },
     {
       "id": "ARC-002-arcs-look-regression",
@@ -725,9 +725,9 @@
         { "action": "goto", "value": "", "wait": 1200 },
         { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
         { "action": "screenshot", "value": "arc-look" },
-        { "action": "expect", "value": { "arcsLoaded": 250, "deckLayerIds": ["arcs"], "arcLayerProps": { "greatCircle": true, "getHeightDefined": true, "srcAlpha": 200, "tgtAlpha": 200, "widthSpread": 2.0 }, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "arcsLoaded": 5000, "deckLayerIds": ["arcs"], "arcLayerProps": { "greatCircle": true, "getHeightDefined": true, "srcAlpha": 200, "tgtAlpha": 200, "widthSpread": 2.0 }, "noConsoleErrors": true } }
       ],
-      "pass_criteria": "EXPECTED-FAIL until bug_arcs is fixed: passes only when the ArcLayer is great-circle (curved), has a defined getHeight (tall arches), source/target alpha is 200, and width spans a visible thin->thick range (max-min width over the 250 arcs >= 2.0px). On today's code this test FAILS on greatCircle/getHeight/widthSpread — that failure IS the documented regression proof. The screenshot records the flat, uniform-fat-stub look for the reviewer."
+      "pass_criteria": "EXPECTED-FAIL until bug_arcs is fixed: passes only when the ArcLayer is great-circle (curved), has a defined getHeight (tall arches), source/target alpha is 200, and width spans a visible thin->thick range (max-min width over the 5000 arcs >= 2.0px). On today's code this test FAILS on greatCircle/getHeight/widthSpread — that failure IS the documented regression proof. The screenshot records the flat, uniform-fat-stub look for the reviewer."
     },
     {
       "id": "POI-001-amenities-on-at-default-zoom-gated",
@@ -765,7 +765,7 @@
         { "action": "range", "selector": "hex-opacity", "value": 40, "wait": 500 },
         { "action": "flyTo", "value": { "longitude": 2.17, "latitude": 41.39, "zoom": 11.2 }, "wait": 1800 },
         { "action": "screenshot", "value": "poi-arcs-opacity-combo" },
-        { "action": "expect", "value": { "layerOn": { "arcs": true, "pois": true }, "arcsLoaded": 250, "poisLoaded": 322, "fillAlphaApprox": 102, "fillAlphaTol": 3, "deckLayerIds": ["hexes", "arcs", "pois-climbing", "pois-yoga", "pois-hospital"], "canvasRendered": true, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "layerOn": { "arcs": true, "pois": true }, "arcsLoaded": 5000, "poisLoaded": 322, "fillAlphaApprox": 102, "fillAlphaTol": 3, "deckLayerIds": ["hexes", "arcs", "pois-climbing", "pois-yoga", "pois-hospital"], "canvasRendered": true, "noConsoleErrors": true } }
       ],
       "pass_criteria": "Hexes (alpha ~102), arcs, and all three POI layers render together at z>10.5; non-blank; no errors."
     },
@@ -956,7 +956,7 @@
       "steps": [
         { "action": "goto", "value": "arcs=1", "wait": 2200 },
         { "action": "screenshot", "value": "dl-arcs" },
-        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 5000, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
       ],
       "pass_criteria": "Loads with arcs on (250 fetched, ArcLayer in deck); non-blank; no errors."
     },
@@ -1016,7 +1016,7 @@
         { "action": "screenshot", "value": "journey2-jun-arcs" },
         { "action": "select", "selector": "season-select", "value": "", "wait": 700 },
         { "action": "screenshot", "value": "journey2-pooled" },
-        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "season": "", "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "season": "", "layerOn": { "arcs": true }, "arcsLoaded": 5000, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
       ],
       "pass_criteria": "Seasonal compare (Feb->Jun->pooled) + arcs overlay all hold; final pooled with arcs on; every shot non-blank; no errors."
     },
@@ -1051,7 +1051,7 @@
         { "action": "screenshot", "value": "journey4-no2" },
         { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
         { "action": "screenshot", "value": "journey4-no2-arcs" },
-        { "action": "expect", "value": { "basemapKey": "light", "field": "no2_ugm3", "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+        { "action": "expect", "value": { "basemapKey": "light", "field": "no2_ugm3", "layerOn": { "arcs": true }, "arcsLoaded": 5000, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
       ],
       "pass_criteria": "Shared state restores, then further clicks (metric + arcs) apply cleanly on top; final light/no2 with arcs; non-blank; no errors."
     },
