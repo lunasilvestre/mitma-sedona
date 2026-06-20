@@ -31,21 +31,51 @@ COMMUTE_ACTS = ("trabajo_estudio",)
 # MITMA distancia bands (verified): '0.5-2','2-10','10-50','>50'. Long = '>50'.
 LONG_DIST_BANDS = (">50",)
 
+# Month-window -> 3-letter season key. THE 3 WINDOWS ARE NOT CLIMATE SEASONS —
+# they are three calendar month-windows of the 2025 download (89 days total):
+#   '02' -> 'feb' (winter · Feb 2025, 28d)
+#   '05' -> 'may' (spring · May 2025, 31d)
+#   '06' -> 'jun' (summer-onset · Jun 2025, 30d)
+# The internal key is the unambiguous 3-letter month code (so column suffixes
+# can't be mistaken for a "winter climatology"); the human label lives only in
+# the UI/manifest, never in the data. Order is load-bearing for the pivot below.
+SEASON_KEYS = ("feb", "may", "jun")
+SEASON_MONTHS = {"02": "feb", "05": "may", "06": "jun"}
 
-def _disaggregate(zone_metric_df: DataFrame, xwalk_df: DataFrame, value_cols, *, key="zone_id"):
+
+def _season_col():
+    """fecha (YYYYMMDD string) -> {feb,may,jun} season key, else NULL.
+
+    Rows whose month is not one of the three downloaded windows map to NULL and
+    are dropped from the seasonal aggregation (the pooled path is unaffected —
+    it never calls this). ``substring('fecha',5,2)`` extracts the 2-char month.
+    """
+    pairs = []
+    for mm, key in SEASON_MONTHS.items():
+        pairs.extend([F.lit(mm), F.lit(key)])
+    return F.element_at(F.create_map(*pairs), F.substring("fecha", 5, 2))
+
+
+def _disaggregate(zone_metric_df: DataFrame, xwalk_df: DataFrame, value_cols, *,
+                  key="zone_id", extra_keys=()):
     """Broadcast equi-join a per-zone metric onto hexes via area_weight.
 
     For additive flow quantities (trips), multiply by ``area_weight``; the
     caller aggregates ``SUM`` per ``h3_id``. For *share*/ratio columns the
     caller should disaggregate the NUMERATOR and DENOMINATOR separately and
     divide post-aggregation (shares are not additively reweightable).
+
+    ``extra_keys`` (e.g. ``('season',)``) are carried through the join and added
+    to the groupBy, so the SUM is per ``(h3_id, *extra_keys)``. area_weight is
+    independent of these extra keys, so each group's area-weighted sum is exact.
     """
     joined = zone_metric_df.join(F.broadcast(xwalk_df), on=key, how="inner")
     agg = [F.sum(F.col(c) * F.col("area_weight")).alias(c) for c in value_cols]
-    return joined.groupBy("h3_id").agg(*agg)
+    return joined.groupBy("h3_id", *extra_keys).agg(*agg)
 
 
-def _disaggregate_ratios(zone_metric_df: DataFrame, xwalk_df: DataFrame, ratio_specs, *, key="zone_id"):
+def _disaggregate_ratios(zone_metric_df: DataFrame, xwalk_df: DataFrame, ratio_specs, *,
+                         key="zone_id", extra_keys=()):
     """Disaggregate RATIO/share columns correctly: carry the raw numerator and
     denominator as area-weighted SUMS through the crosswalk, then divide AFTER
     the per-hex groupBy. This is the review-major fix — a ratio is NOT additively
@@ -65,6 +95,12 @@ def _disaggregate_ratios(zone_metric_df: DataFrame, xwalk_df: DataFrame, ratio_s
     Returns a per-hex DataFrame with each ``out_col`` plus the underlying
     area-weighted ``*_num`` / ``*_den`` sums (so callers can also surface
     coverage fractions or recombine).
+
+    ``extra_keys`` (e.g. ``('season',)``) generalise the groupBy to
+    ``(h3_id, *extra_keys)`` so a ratio is rebuilt per (hex, season) from its own
+    area-weighted numerator/denominator. Closure is untouched: area_weight does
+    not depend on these keys, so SUM(num*w) / SUM(den*w) per group is the exact
+    per-group ratio — the same ratio-disaggregation fix with one more groupBy key.
     """
     # Collect the distinct raw count columns we must carry down.
     raw_cols = []
@@ -74,7 +110,7 @@ def _disaggregate_ratios(zone_metric_df: DataFrame, xwalk_df: DataFrame, ratio_s
                 raw_cols.append(c)
     joined = zone_metric_df.join(F.broadcast(xwalk_df), on=key, how="inner")
     aggs = [F.sum(F.col(c) * F.col("area_weight")).alias(c) for c in raw_cols]
-    hexed = joined.groupBy("h3_id").agg(*aggs)
+    hexed = joined.groupBy("h3_id", *extra_keys).agg(*aggs)
     for out, num, den in ratio_specs:
         hexed = hexed.withColumn(
             out, F.col(num) / F.when(F.col(den) > 0, F.col(den))
@@ -178,6 +214,55 @@ def hourly_rhythm(od_silver_df: DataFrame, xwalk_df: DataFrame):
     return scalars, rhythm_rows
 
 
+def hourly_rhythm_seasonal(od_silver_df: DataFrame, xwalk_df: DataFrame):
+    """Per-(hex, season) hour-of-day profile -> peak shares + peak bucket.
+
+    Identical to :func:`hourly_rhythm` but with ``season`` threaded through every
+    aggregation so each (hex, month-window) normalises to ITS OWN 24-vector and
+    the diurnal rhythm shift between feb/may/jun is preserved (summer-onset
+    coastal hexes flatten the commuter am/pm peaks and lift midday/night).
+
+    Returns a per-``(h3_id, season)`` scalars frame
+    ``(am_peak_share, pm_peak_share, midday_share, night_share, peak_hour_bucket)``.
+    The pooled :func:`hourly_rhythm` rhythm_long (sparkline source) is unchanged;
+    a per-season long-form is deferred (the sidecar carries only the scalars).
+    """
+    zp = (
+        od_silver_df.withColumn("season", _season_col())
+        .where(F.col("season").isNotNull())
+        .groupBy(F.col("destino").alias("zone_id"), "periodo", "season")
+        .agg(F.sum("viajes").alias("viajes"))
+    )
+    joined = zp.join(F.broadcast(xwalk_df), on="zone_id", how="inner")
+    hex_hour = joined.groupBy("h3_id", "season", "periodo").agg(
+        F.sum(F.col("viajes") * F.col("area_weight")).alias("h")
+    )
+    # Normalise WITHIN each (hex, season) so each window has its own 24-vector.
+    w = Window.partitionBy("h3_id", "season")
+    hex_hour = hex_hour.withColumn("day_total", F.sum("h").over(w)).withColumn(
+        "share", F.col("h") / F.when(F.col("day_total") > 0, F.col("day_total"))
+    )
+
+    def band(lo, hi):
+        return F.sum(F.when((F.col("periodo") >= lo) & (F.col("periodo") <= hi), F.col("share")).otherwise(0.0))
+
+    scalars = hex_hour.groupBy("h3_id", "season").agg(
+        band(7, 9).alias("am_peak_share"),
+        band(17, 19).alias("pm_peak_share"),
+        band(11, 15).alias("midday_share"),
+        (band(0, 5) + band(22, 23)).alias("night_share"),
+        F.max_by("periodo", "h").alias("peak_hour"),
+    )
+    scalars = scalars.withColumn(
+        "peak_hour_bucket",
+        F.when((F.col("peak_hour") >= 5) & (F.col("peak_hour") <= 10), "morning")
+        .when((F.col("peak_hour") >= 11) & (F.col("peak_hour") <= 15), "midday")
+        .when((F.col("peak_hour") >= 16) & (F.col("peak_hour") <= 19), "evening")
+        .otherwise("night"),
+    ).drop("peak_hour")
+    return scalars
+
+
 # ---------------------------------------------------------------------------
 # Theme 2 — weekend hotspots
 # ---------------------------------------------------------------------------
@@ -250,6 +335,77 @@ def weekend_hotspots(od_silver_df: DataFrame, xwalk_df: DataFrame, *, min_suppor
         ),
     ).select(
         "h3_id", "support_n", "weekend_weekday_ratio",
+        "leisure_share", "commute_share", "weekend_hotspot_score",
+    )
+    return hexed
+
+
+def weekend_hotspots_seasonal(od_silver_df: DataFrame, xwalk_df: DataFrame, *, min_support: int = 50):
+    """Per-(hex, season) weekend_weekday_ratio + leisure/commute shares + hotspot.
+
+    THE headline seasonal signal: coastal / second-home hexes flip from a
+    weekday-led ratio in winter (Feb) to a weekend-led one in summer-onset (Jun)
+    as beach/trail weekend trips switch on — pooling all 89 days averages this
+    contrast away. Mirrors :func:`weekend_hotspots` exactly, with ``season``
+    threaded through every groupBy and ``extra_keys=('season',)`` passed to the
+    ratio disaggregation. Closure is untouched (area_weight is season-independent).
+
+    ``min_support`` gates ``weekend_hotspot_score`` on the per-SEASON area-weighted
+    support count (~1/3 the pooled count — one ~30-day window vs 89 days), so
+    noisy thin-window hexes stay NULL rather than fake-zero. Lower it (e.g.
+    pooled//3) only if a window is too sparse to read; document the choice.
+
+    Returns a per-``(h3_id, season)`` frame
+    ``(season, weekend_weekday_ratio, leisure_share, commute_share,
+       weekend_hotspot_score, support_n)``.
+    """
+    od = od_silver_df.withColumn("season", _season_col()).where(F.col("season").isNotNull())
+
+    daily = (
+        od.groupBy(F.col("destino").alias("zone_id"), "season", "fecha", "is_weekend")
+        .agg(F.sum("viajes").alias("v"), F.sum("support_n").alias("n"))
+    )
+    by_flag = daily.groupBy("zone_id", "season", "is_weekend").agg(
+        F.avg("v").alias("mean_v"), F.sum("n").alias("support_n")
+    )
+    wk = (
+        by_flag.groupBy("zone_id", "season")
+        .pivot("is_weekend", [True, False])
+        .agg(F.first("mean_v"))
+        .withColumnRenamed("true", "we_mean")
+        .withColumnRenamed("false", "wd_mean")
+    )
+    support = by_flag.groupBy("zone_id", "season").agg(F.sum("support_n").alias("support_n"))
+    leis = od.groupBy(F.col("destino").alias("zone_id"), "season").agg(
+        F.sum(F.when(F.col("actividad_destino").isin(*LEISURE_ACTS), F.col("viajes")).otherwise(0.0)).alias("leis_v"),
+        F.sum(F.when(F.col("actividad_destino").isin(*COMMUTE_ACTS), F.col("viajes")).otherwise(0.0)).alias("comm_v"),
+        F.sum("viajes").alias("tot_v"),
+    )
+    zone = (
+        wk.join(support, ["zone_id", "season"], "outer")
+        .join(leis, ["zone_id", "season"], "outer")
+        .fillna(0.0, subset=["we_mean", "wd_mean", "leis_v", "comm_v", "tot_v", "support_n"])
+    )
+
+    hexed = _disaggregate_ratios(
+        zone, xwalk_df,
+        [
+            ("weekend_weekday_ratio", "we_mean", "wd_mean"),
+            ("leisure_share", "leis_v", "tot_v"),
+            ("commute_share", "comm_v", "tot_v"),
+        ],
+        extra_keys=("season",),
+    )
+    hex_support = _disaggregate(zone, xwalk_df, ["support_n"], extra_keys=("season",))
+    hexed = hexed.join(hex_support, ["h3_id", "season"], "inner")
+    hexed = hexed.withColumn(
+        "weekend_hotspot_score",
+        F.when(
+            F.col("support_n") >= min_support,
+            F.col("weekend_weekday_ratio") * (F.lit(0.5) + F.col("leisure_share")),
+        ),
+    ).select(
+        "h3_id", "season", "support_n", "weekend_weekday_ratio",
         "leisure_share", "commute_share", "weekend_hotspot_score",
     )
     return hexed
