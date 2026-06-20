@@ -169,6 +169,6 @@
     "mixed-balanced"
   ],
   "mobility_source": "dev1",
-  "mobility_window": "7 days, March 2024 (2024-03-04..10), distritos zoning",
+  "mobility_window": "89 days, 2025-02 + 2025-05 + 2025-06 (20250201..20250630), distritos zoning",
   "mobility_method": "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
 }
