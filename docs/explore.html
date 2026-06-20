@@ -108,7 +108,10 @@
             <option value="night_share">Night trip share (22–05h)</option>
             <option value="weekend_weekday_ratio">Weekend ÷ weekday trips (diverging)</option>
             <option value="weekend_hotspot_score">Weekend hotspot score (diverging)</option>
+            <option value="weekend_hotspot_summer_minus_winter">Weekend pull: summer-onset − winter (Jun−Feb, diverging)</option>
             <option value="leisure_share">Leisure-activity trip share</option>
+            <option value="commute_share">Commute-activity trip share</option>
+            <option value="midday_share">Midday trip share (11–15h)</option>
             <option value="intra_zone_share">Self-containment (intra-zone)</option>
             <option value="geodemo_diversity">Geodemographic diversity (entropy)</option>
             <option value="low_income_inflow_share">Low-income inflow share</option>
@@ -136,6 +139,22 @@
         <p class="caption" id="metric-caption">Recolour the hexes by one input dimension to
           read what drives the score. Diverging fields pivot at their natural midpoint;
           presence fields treat "no data" as a distinct grey state, not zero.</p>
+      </div>
+
+      <div class="control-row" style="margin-left:23px">
+        <label class="field-label" for="season-select">Month-window</label>
+        <select id="season-select">
+          <option value="">Pooled (all 89 days)</option>
+          <option value="feb">winter · Feb 2025</option>
+          <option value="may">spring · May 2025</option>
+          <option value="jun">summer-onset · Jun 2025</option>
+        </select>
+        <p class="caption" id="season-caption">Flip the season-aware mobility metrics
+          (weekend ratio, weekend hotspot, leisure/commute share, the 4 peak shares,
+          peak-hour band) between three calendar <strong>month-windows</strong> — Feb vs
+          Jun, same hexes, same crosswalk — to see where weekend pull switches ON as the
+          coast warms. A <strong>month-window comparison, not a seasonal/climate
+          average</strong>. Greyed when the active metric is pooled across all 89 days.</p>
       </div>
 
       <div class="layer-row" style="margin-left:23px; margin-top:10px">
@@ -186,9 +205,15 @@
       <ul>
         <li><strong>Relative index, not a guarantee.</strong> The score orders hexes within
           Catalonia; it makes no absolute or "you should move here" claim.</li>
-        <li><strong>Dev-scope window.</strong> The mobility signal is <strong>7 days of
-          March 2024</strong> (2024-03-04 … 10), not a full year — a representative slice,
-          not a seasonal average.</li>
+        <li><strong>Month-window scope, not climatology.</strong> The mobility signal pools
+          <strong>89 days across three 2025 calendar month-windows</strong> — Feb (28d),
+          May (31d), Jun (30d). The Month-window dropdown splits the season-aware metrics
+          into those three windows (winter · Feb / spring · May / summer-onset · Jun) so you
+          can read where weekend pull switches on as the coast warms. These are
+          <strong>three calendar month-windows, NOT a seasonal or climate average</strong>:
+          Feb is one cold month, Jun is summer-<em>onset</em> (the coastal weekend uplift is
+          still building), and the contrast is a relative index — the starting question
+          "where does weekend pull switch ON, Feb vs Jun?" — not a year-round verdict.</li>
         <li><strong>Sparse amenity layers.</strong> Some proximity layers cover only part
           of the grid — climbing ~49%, hospitals ~31%, yoga ~15%, coast ~6%. Cells with
           no amenity in the 10 km catchment simply earn no closeness reward there (and a
@@ -297,7 +322,9 @@
           <a href="why_spark_sedona.md"><code>why_spark_sedona.md</code></a>.</p>
         <p class="caption" style="margin-bottom:0">
           Score range under the default preset: min 8 · median 59 · mean 57 · max 100 · std 14
-          across 45,220 hexes. Mobility window is <strong>dev-scope</strong> (7 days, March 2024).
+          across 45,220 hexes. Mobility window is <strong>89 days across three 2025
+          month-windows</strong> (Feb + May + Jun) — flip the Month-window dropdown to compare
+          them; a calendar-window comparison, not a climate average.
           <a href="v2_revision.md">See the v2 improvement roadmap →</a></p>
       </details>
     </section>
@@ -382,8 +409,20 @@ const METRIC_CAPTIONS = {
     "a min-rows floor on the OD-segment row count (sparse hexes give noisy ratios). Above 1 = " +
     "a genuine weekend hotspot. Diverging, pivot 1.0. NB: the MITMA <100-device privacy floor " +
     "is applied before publication and is invisible in the expanded open data.",
+  weekend_hotspot_summer_minus_winter: "Jun weekend-hotspot minus Feb (summer-onset − winter). " +
+    "Warm = switches ON as a weekend hotspot in summer-onset (coast, trail-heads, second-home " +
+    "zones); ~0 = no seasonal shift; cool = relatively more weekend-busy in winter. Null (grey) " +
+    "where either window failed the support gate — never a fake zero. Diverging, pivot 0. " +
+    "A month-window contrast, NOT climatology.",
   leisure_share: "Share of inflowing trips whose destination activity is leisure (frequent / " +
-    "non-frequent), vs commute/home. High = a leisure magnet. From the full activity cube.",
+    "non-frequent), vs commute/home. High = a leisure magnet. From the full activity cube. " +
+    "Season-aware: use the Month-window dropdown for Feb/May/Jun.",
+  commute_share: "Share of inflowing trips whose destination activity is work/study, vs " +
+    "leisure/home. The complement of leisure-share; dips in the leisure-heavy summer window. " +
+    "Season-aware: use the Month-window dropdown for Feb/May/Jun.",
+  midday_share: "Share of a hex's daily trips arriving 11–15h. Elevated in residential / " +
+    "leisure hexes and in the summer-onset window as commuter peaks flatten. Season-aware: " +
+    "use the Month-window dropdown. Hover for the full 24h sparkline.",
   intra_zone_share: "Share of trips that start AND end in the same zone — self-containment. " +
     "High = a complete neighbourhood (errands stay local); low = a commuter dormitory. " +
     "Brighter = more self-contained.",
@@ -579,6 +618,22 @@ async function main() {
     gb.setPreset(e.target.value);
   });
 
+  const seasonSelect = document.getElementById("season-select");
+  const seasonCaption = document.getElementById("season-caption");
+  // Grey the Season dropdown when the active metric is pooled across all 89 days
+  // (not season-aware), with a hint. Season-aware metrics enable it.
+  function syncSeasonSelectEnabled() {
+    const seasonal = gb.activeFieldIsSeasonal();
+    seasonSelect.disabled = !seasonal;
+    seasonSelect.parentElement.classList.toggle("is-disabled", !seasonal);
+    seasonCaption.textContent = seasonal
+      ? "Flip this season-aware metric between three calendar month-windows — Feb vs Jun, " +
+        "same hexes, same crosswalk. A month-window comparison, not a seasonal/climate average."
+      : "This metric is pooled across all 89 days — pick a season-aware mobility metric " +
+        "(weekend ratio, weekend hotspot, leisure/commute share, the peak shares, peak-hour " +
+        "band) to compare month-windows.";
+  }
+
   document.getElementById("metric-select").addEventListener("change", (e) => {
     const key = e.target.value;
     document.getElementById("metric-caption").textContent =
@@ -588,7 +643,13 @@ async function main() {
     } else {
       gb.setMetric(key);
     }
+    syncSeasonSelectEnabled();
   });
+
+  seasonSelect.addEventListener("change", (e) => {
+    gb.setSeason(e.target.value);
+  });
+  syncSeasonSelectEnabled();
 
   document.getElementById("toggle-extrude").addEventListener("change", (e) => {
     gb.setExtrude(e.target.checked);
@@ -646,6 +707,10 @@ async function main() {
   if (qs.has("metric")) {
     const sel = document.getElementById("metric-select");
     if ([...sel.options].some((o) => o.value === qs.get("metric"))) { sel.value = qs.get("metric"); fire("metric-select", "change"); }
+  }
+  if (qs.has("season")) {
+    const sel = document.getElementById("season-select");
+    if ([...sel.options].some((o) => o.value === qs.get("season"))) { sel.value = qs.get("season"); fire("season-select", "change"); }
   }
   if (qs.get("extrude") === "1") { document.getElementById("toggle-extrude").checked = true; fire("toggle-extrude", "change"); }
   if (qs.get("arcs") === "1") { document.getElementById("toggle-arcs").checked = true; fire("toggle-arcs", "change"); }

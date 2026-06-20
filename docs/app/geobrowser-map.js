@@ -186,31 +186,57 @@
     // === v3 MITMA deep-Spark mobility layers (Sedona dasymetric crosswalk) ===
     am_peak_share: {
       column: 'am_peak_share', ramp: 'magma', label: 'AM-peak trip share (07–09h)',
-      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal'
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal',
+      seasonal: true, seasonKey: 'am'
     },
     pm_peak_share: {
       column: 'pm_peak_share', ramp: 'magma', label: 'PM-peak trip share (17–20h)',
-      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal'
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'tidal',
+      seasonal: true, seasonKey: 'pm'
+    },
+    midday_share: {
+      column: 'midday_share', ramp: 'magma', label: 'Midday trip share (11–15h)',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'flat', highLabel: 'midday-led',
+      seasonal: true, seasonKey: 'mid'
     },
     night_share: {
       column: 'night_share', ramp: 'magma', label: 'Night trip share (22–05h)',
-      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'quiet', highLabel: 'active'
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'quiet', highLabel: 'active',
+      seasonal: true, seasonKey: 'night'
     },
     peak_hour_bucket: {
       column: 'peak_hour_bucket', ramp: 'viridis', label: 'Peak-hour band',
-      kind: 'categorical', goodWhen: 'neutral', unit: ''
+      kind: 'categorical', goodWhen: 'neutral', unit: '',
+      seasonal: true, seasonKey: 'peak'
     },
     weekend_weekday_ratio: {
       column: 'weekend_weekday_ratio', ramp: 'RdBu', label: 'Weekend ÷ weekday trips',
-      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '×', lowLabel: 'weekday', highLabel: 'weekend'
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '×', lowLabel: 'weekday', highLabel: 'weekend',
+      seasonal: true, seasonKey: 'wwr'
     },
     weekend_hotspot_score: {
       column: 'weekend_hotspot_score', ramp: 'RdBu', label: 'Weekend hotspot score',
-      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'weekday', highLabel: 'weekend draw'
+      kind: 'diverging', goodWhen: 'neutral', pivot: 1.0, unit: '', lowLabel: 'weekday', highLabel: 'weekend draw',
+      seasonal: true, seasonKey: 'whs'
+    },
+    // SEASONAL headline delta — its OWN field (independent of the Season dropdown).
+    // Three calendar month-windows (Jun−Feb), NOT a climate average. Warm =
+    // switches ON as a weekend hotspot in summer-onset; ~0 = no seasonal shift.
+    weekend_hotspot_summer_minus_winter: {
+      column: 'weekend_hotspot_summer_minus_winter', ramp: 'RdBu',
+      label: 'Weekend pull: summer-onset − winter (Jun−Feb)',
+      kind: 'diverging', goodWhen: 'neutral', pivot: 0.0, unit: '',
+      lowLabel: 'more winter draw', highLabel: 'more summer draw'
     },
     leisure_share: {
       column: 'leisure_share', ramp: 'viridis', label: 'Leisure-activity trip share',
-      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'errand', highLabel: 'leisure'
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'errand', highLabel: 'leisure',
+      seasonal: true, seasonKey: 'leis'
+    },
+    commute_share: {
+      column: 'commute_share', ramp: 'viridis', label: 'Commute-activity trip share',
+      kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'leisure', highLabel: 'commute',
+      seasonal: true, seasonKey: 'comm'
     },
     mobility_typology: {
       column: 'mobility_typology', ramp: 'viridis', label: 'Mobility typology',
@@ -339,11 +365,13 @@
     this._arcs = null;
     this._pois = null;
     this._rhythm = null;   // lazy-loaded h3_id -> [24 floats] (hover sparkline)
+    this._seasons = null;  // lazy-loaded h3_id -> {feb:{...},may,jun} (season sidecar)
     this.manifest = {};
 
     // View state of the thematic hex layer.
     this._fieldKey = 'score';   // active field key into FIELDS
     this._preset = 'default';   // active score preset
+    this._season = '';          // '' = Pooled (all 89 days); else 'feb'|'may'|'jun'
     this._extrude = false;
     this._layersOn = { hexes: true, arcs: false, pois: false };
     this._basemapKey = opts.basemap && BASEMAPS[opts.basemap] ? opts.basemap : 'satellite';
@@ -384,6 +412,19 @@
     return this._fetchJson(this.dataBase + 'rhythm.json')
       .then(function (d) { self._rhythm = d || {}; })
       .catch(function () { self._rhythm = {}; });
+  };
+
+  // Lazy-load the per-(hex x month-window) sidecar (h3_id -> {feb,may,jun}).
+  // Loaded once on the first non-Pooled season selection (mirror of loadRhythm),
+  // so the default page load is unchanged. Three calendar month-windows, NOT a
+  // climate average — see manifest.seasonal.note.
+  GeoBrowser.prototype.loadSeasons = function () {
+    var self = this;
+    if (this._seasons || this._seasonsLoading) { return Promise.resolve(); }
+    this._seasonsLoading = true;
+    return this._fetchJson(this.dataBase + 'seasons.json')
+      .then(function (d) { self._seasons = d || {}; })
+      .catch(function () { self._seasons = {}; });
   };
 
   GeoBrowser.prototype._fetchJson = function (url) {
@@ -513,15 +554,44 @@
     return f;
   };
 
-  // Domain (min/max) for a column. Prefer manifest stats; else scan hexes once.
-  GeoBrowser.prototype._domain = function (column) {
-    if (this._domainCache[column]) { return this._domainCache[column]; }
+  // Is the active field BOTH season-aware AND a non-Pooled window selected?
+  GeoBrowser.prototype._seasonActive = function (field) {
+    return !!(this._season && field && field.seasonal && field.seasonKey);
+  };
+
+  // Resolve a hex's value for a field, honouring the active month-window. For a
+  // season-aware field with a non-Pooled season selected, read the per-season
+  // value from the lazy seasons.json sidecar (short seasonKey); otherwise read
+  // the inline pooled column. Missing sidecar entry -> null (no-data grey), never
+  // 0 — honesty over a fake zero (e.g. a hex that failed that window's support gate).
+  GeoBrowser.prototype._valueFor = function (d, field) {
+    if (this._seasonActive(field)) {
+      var rec = this._seasons && d.h3_id ? this._seasons[d.h3_id] : null;
+      var per = rec ? rec[this._season] : null;
+      var v = per ? per[field.seasonKey] : null;
+      return v == null ? null : v;
+    }
+    return d[field.column];
+  };
+
+  // Domain (min/max) for a field. Prefer manifest stats; else scan hexes once.
+  // Accepts either a field object or a bare column string (legacy callers). When
+  // a month-window is active and the field is season-aware, the scan reads the
+  // per-season sidecar values (each window has its own range), cached per
+  // (column, season) so flipping windows recomputes the ramp correctly.
+  GeoBrowser.prototype._domain = function (fieldOrColumn) {
+    var field = (typeof fieldOrColumn === 'string')
+      ? { column: fieldOrColumn } : fieldOrColumn;
+    var column = field.column;
+    var seasonOn = this._seasonActive(field);
+    var cacheKey = seasonOn ? (column + '@' + this._season) : column;
+    if (this._domainCache[cacheKey]) { return this._domainCache[cacheKey]; }
     // Categorical columns have no numeric domain.
     if (CATEGORICAL[column]) { return null; }
     var dom = null;
 
-    // Score columns: manifest.score_stats[<preset>].{min,max}
-    if (column.indexOf('score_') === 0) {
+    // Score columns: manifest.score_stats[<preset>].{min,max} (never seasonal).
+    if (!seasonOn && column.indexOf('score_') === 0) {
       var preset = column.slice('score_'.length);
       var ss = (this.manifest.score_stats || {})[preset];
       if (ss && ss.min != null && ss.max != null) { dom = [ss.min, ss.max]; }
@@ -530,7 +600,7 @@
       var lo = Infinity, hi = -Infinity;
       var hx = this._hexes;
       for (var i = 0; i < hx.length; i++) {
-        var v = hx[i][column];
+        var v = seasonOn ? this._valueFor(hx[i], field) : hx[i][column];
         if (v == null || v === false || v === true) {
           if (v === true) { hi = Math.max(hi, 1); }
           if (v === false) { lo = Math.min(lo, 0); }
@@ -543,7 +613,7 @@
       if (lo === Infinity) { dom = [0, 1]; }
       else { if (lo === hi) { hi = lo + 1; } dom = [lo, hi]; }
     }
-    this._domainCache[column] = dom;
+    this._domainCache[cacheKey] = dom;
     return dom;
   };
 
@@ -597,10 +667,13 @@
     var field = this._activeField();
     var column = field.column;
     var ramp = field.ramp;
+    var seasonOn = this._seasonActive(field);
     // Categorical fields have no numeric domain (_domain returns null); use a
     // placeholder [0,1] so the updateTriggers array deref is safe. The fill
     // accessor ignores `dom` for categorical and reads the label->colour map.
-    var dom = this._domain(column) || [0, 1];
+    // When a month-window is active the domain is scanned over the per-season
+    // values (a Feb weekend ratio spans a different range than the pooled one).
+    var dom = this._domain(field) || [0, 1];
     var extrude = this._extrude;
     // elevationScale shrinks as zoom rises so towers don't occlude the base.
     var z = this._viewState.zoom || 8;
@@ -617,7 +690,7 @@
       elevationScale: elevScale,
       getHexagon: function (d) { return d.h3_id; },
       getFillColor: function (d) {
-        var v = d[column];
+        var v = self._valueFor(d, field);
         // Null cells scale with the slider too, but stay clearly dimmer than
         // data cells so "no data" never reads as a value.
         var nullA = Math.round(NULL_ALPHA * (self._fillAlpha / FILL_ALPHA));
@@ -636,15 +709,15 @@
       },
       getElevation: function (d) {
         if (!extrude) { return 0; }
-        var v = d[column];
+        var v = self._valueFor(d, field);
         if (v == null || (typeof v === 'number' && isNaN(v))) { return 0; }
         // Categorical fields carry no magnitude — flat extrusion (full height).
         if (field.kind === 'categorical') { return 1; }
         return self._normalise(field, v, dom);
       },
       updateTriggers: {
-        getFillColor: [column, ramp, dom[0], dom[1], field.kind, this._fillAlpha],
-        getElevation: [column, extrude, dom[0], dom[1], field.kind]
+        getFillColor: [column, ramp, dom[0], dom[1], field.kind, this._fillAlpha, this._season, seasonOn],
+        getElevation: [column, extrude, dom[0], dom[1], field.kind, this._season, seasonOn]
       }
       // NOTE: deliberately NO per-attribute `transitions` here. Animated
       // getFillColor/getElevation interpolation across 45k instanced hexes
@@ -714,7 +787,7 @@
 
     if (id === 'hexes') {
       var field = this._activeField();
-      var v = o[field.column];
+      var v = this._valueFor(o, field);
       var valueHtml;
       if (v == null || (typeof v === 'number' && isNaN(v))) {
         valueHtml = '<span class="tt-null">no data</span>';
@@ -733,9 +806,12 @@
         sparkHtml = '<div class="tt-spark">' + sparkline(prof) +
           '<div class="tt-spark-cap">hour-of-day trip share (0–23h)</div></div>';
       }
+      var ttWindow = this._seasonActive(field)
+        ? '<div class="tt-window">' + esc(this._seasonLabel(this._season)) + '</div>' : '';
       return {
         html: '<div class="gb-tooltip">' +
           '<div class="tt-label">' + esc(field.label) + '</div>' +
+          ttWindow +
           '<div class="tt-value">' + valueHtml + '</div>' +
           sparkHtml +
           '<div class="tt-id">' + esc(o.h3_id || '') + '</div>' +
@@ -765,6 +841,10 @@
   GeoBrowser.prototype._emitLegend = function () {
     if (typeof this.onLegend !== 'function') { return; }
     var field = this._activeField();
+    var self = this;
+    // Append the active month-window to the label so the reader always knows
+    // which window they see (honest: a month-window, not a climate average).
+    var windowSuffix = this._seasonActive(field) ? (' · ' + this._seasonLabel(this._season)) : '';
 
     // Categorical legend: one swatch per label present in the data (ordered by
     // the manifest's typology order when available, else the map's own order).
@@ -774,7 +854,7 @@
         ? this.manifest.typology_labels : Object.keys(cmap);
       var present = {};
       for (var k = 0; k < this._hexes.length; k++) {
-        var lv = this._hexes[k][field.column];
+        var lv = self._valueFor(this._hexes[k], field);
         if (lv != null) { present[lv] = true; }
       }
       // Include known labels in the manifest order first, then any extra labels
@@ -787,13 +867,13 @@
         return { label: lab, color: categoricalColor(field.column, lab) || NULL_COLOR };
       });
       this.onLegend({
-        label: field.label, kind: 'categorical',
+        label: field.label + windowSuffix, kind: 'categorical',
         categories: cats, nullColor: NULL_COLOR
       });
       return;
     }
 
-    var dom = this._domain(field.column);
+    var dom = this._domain(field);
     var stops = [];
     var n = 6;
     for (var i = 0; i < n; i++) {
@@ -810,7 +890,7 @@
     var loLabel = swap ? field.highLabel : field.lowLabel;
     var hiLabel = swap ? field.lowLabel : field.highLabel;
     this.onLegend({
-      label: field.label,
+      label: field.label + windowSuffix,
       kind: field.kind,
       stops: stops,
       lowVal: loVal,
@@ -819,6 +899,16 @@
       highLabel: hiLabel,
       nullColor: NULL_COLOR
     });
+  };
+
+  // Human label for a season key, from the manifest windows (falls back to the
+  // key). The honest "winter · Feb 2025" form — never a bare "winter".
+  GeoBrowser.prototype._seasonLabel = function (key) {
+    var windows = (this.manifest.seasonal && this.manifest.seasonal.windows) || [];
+    for (var i = 0; i < windows.length; i++) {
+      if (windows[i].key === key) { return windows[i].label; }
+    }
+    return key;
   };
 
   // ---- Public API ------------------------------------------------------------
@@ -840,6 +930,30 @@
       var self = this;
       this.loadRhythm().then(function () { self._render(); });
     }
+  };
+
+  // Select a month-window: '' = Pooled (default, reads inline hexes.json exactly
+  // as before — zero behaviour change), else 'feb'|'may'|'jun'. The first
+  // non-Pooled selection lazy-loads the seasons.json sidecar (mirror of rhythm),
+  // then re-renders. Season-aware fields re-point to that window; non-seasonal
+  // fields ignore _season entirely (the Season dropdown should be greyed for them).
+  GeoBrowser.prototype.setSeason = function (key) {
+    key = key || '';
+    if (key === this._season) { return; }
+    this._season = key;
+    var self = this;
+    if (key && !this._seasons) {
+      this.loadSeasons().then(function () { self._render(); });
+    } else {
+      this._render();
+    }
+  };
+
+  // Whether the active field responds to the Season dropdown (drives the UI's
+  // enabled/greyed state + the 'pooled across all 89 days' hint).
+  GeoBrowser.prototype.activeFieldIsSeasonal = function () {
+    var f = FIELDS[this._fieldKey];
+    return !!(f && f.seasonal);
   };
 
   GeoBrowser.prototype.setExtrude = function (on) {

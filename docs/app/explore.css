@@ -118,6 +118,10 @@ select {
   font-family: inherit;
 }
 select:focus { outline: 1px solid var(--accent); }
+select:disabled { opacity: 0.45; cursor: not-allowed; }
+/* A control-row whose select is disabled (e.g. Month-window when the active
+   metric is pooled across all 89 days) dims its label too. */
+.control-row.is-disabled .field-label { opacity: 0.55; }
 
 /* Range slider (hex opacity) — dark theme */
 input[type="range"] {
@@ -459,6 +463,7 @@ footer .caption { font-size: 11px; color: var(--dim); margin: 0 0 8px; line-heig
 .gb-tooltip .tt-label { color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
 .gb-tooltip .tt-value { font-size: 14px; margin: 2px 0; }
 .gb-tooltip .tt-id { color: var(--dim); font-size: 10px; font-family: ui-monospace, monospace; }
+.gb-tooltip .tt-window { color: var(--accent); font-size: 10.5px; margin: 1px 0 2px; font-weight: 600; }
 .gb-tooltip .tt-null { color: #b8c0d0; font-style: italic; }
 .gb-tooltip .tt-spark { margin: 5px 0 2px; }
 .gb-tooltip .tt-spark svg { display: block; width: 168px; height: 34px; }
