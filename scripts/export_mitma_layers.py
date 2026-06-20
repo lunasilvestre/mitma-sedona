@@ -47,6 +47,7 @@ SOURCES = {
         "features": DEV1 / "h3_mitma_features.parquet",
         "rhythm_long": DEV1 / "rhythm_long.parquet",   # (h3_id, periodo, share) long-form
         "arcs": DEV1 / "arcs.json",                     # {source:[lon,lat],target:[...],value}
+        "seasonal_long": DEV1 / "seasonal_long.parquet",  # h3_id + <metric>_<feb|may|jun> wide
     },
     "dev2_bridge": {
         "features": GOLD / "mitma_mobility_gold.parquet",
@@ -87,6 +88,33 @@ MOBILITY_SCALAR_COLS = [
     "sexo_coverage", "edad_coverage", "renta_coverage",
     # density / confidence proxy (OD-segment row count — NOT the privacy gate)
     "support_n",
+    # SEASONAL headline delta(s) — INLINE (the story; must load with the map).
+    # Jun (summer-onset) minus Feb (winter) per hex; null where either window
+    # failed the per-season support gate. The full per-season fields ride in the
+    # lazy seasons.json sidecar, NOT here.
+    "weekend_hotspot_summer_minus_winter", "weekend_ratio_summer_minus_winter",
+]
+
+# Per-season sidecar (seasons.json) config. Three calendar month-windows, NOT a
+# climate average. SHORT metric keys halve the JSON; nested {h3:{season:{...}}}
+# avoids key-repetition bloat. The wide parquet col is "<metric>_<season>".
+SEASON_KEYS = ("feb", "may", "jun")
+SEASON_WINDOWS = [
+    {"key": "feb", "label": "winter · Feb 2025", "days": 28},
+    {"key": "may", "label": "spring · May 2025", "days": 31},
+    {"key": "jun", "label": "summer-onset · Jun 2025", "days": 30},
+]
+# (long parquet metric name, short sidecar key, round-dp). Order = display order.
+SEASON_METRICS = [
+    ("weekend_weekday_ratio", "wwr", 3),
+    ("weekend_hotspot_score", "whs", 3),
+    ("leisure_share", "leis", 3),
+    ("commute_share", "comm", 3),
+    ("am_peak_share", "am", 3),
+    ("pm_peak_share", "pm", 3),
+    ("midday_share", "mid", 3),
+    ("night_share", "night", 3),
+    ("peak_hour_bucket", "peak", None),  # categorical string
 ]
 
 # Fixed label->meaning order for the typology legend (manifest + browser). Must
@@ -138,7 +166,8 @@ def _round_mobility(df: pd.DataFrame) -> None:
         if c in df:
             df[c] = df[c].round().astype("Int64")
     for c in ("mitma_through_ratio", "weekend_weekday_ratio", "weekend_hotspot_score",
-              "geodemo_diversity"):
+              "geodemo_diversity",
+              "weekend_hotspot_summer_minus_winter", "weekend_ratio_summer_minus_winter"):
         if c in df:
             df[c] = df[c].round(3)
     for c in ("am_peak_share", "midday_share", "pm_peak_share", "night_share",
@@ -277,6 +306,49 @@ def _load_arcs(src: dict) -> list[dict]:
     return out
 
 
+def _load_seasonal(src: dict) -> dict:
+    """Read seasonal_long.parquet -> nested {h3_id: {season: {short:val}}}.
+
+    The wide parquet has h3_id + ``<metric>_<season>`` columns. We pivot to the
+    compact nested sidecar shape used by the browser:
+        { "<h3_id>": { "feb": {wwr, whs, leis, comm, am, pm, mid, night, peak},
+                       "may": {...}, "jun": {...} }, ... }
+    SHORT keys (per SEASON_METRICS) halve the JSON; NaN/None scrubbed; a season
+    whose every metric is null for a hex is OMITTED (keeps the sidecar lean — the
+    browser treats a missing season as no-data grey, same as a null value).
+    """
+    p = src.get("seasonal_long")
+    if not p or not p.exists():
+        return {}
+    df = pd.read_parquet(p)
+    out: dict[str, dict] = {}
+    recs = df.to_dict(orient="records")
+    for r in recs:
+        h3 = r.get("h3_id")
+        if h3 is None:
+            continue
+        per_season: dict[str, dict] = {}
+        for s in SEASON_KEYS:
+            vals: dict[str, object] = {}
+            for metric, short, dp in SEASON_METRICS:
+                v = r.get(f"{metric}_{s}")
+                if v is None:
+                    continue
+                if isinstance(v, float):
+                    if math.isnan(v) or math.isinf(v):
+                        continue
+                    vals[short] = round(v, dp) if dp is not None else v
+                elif pd.isna(v):
+                    continue
+                else:
+                    vals[short] = v  # categorical string (peak_hour_bucket)
+            if vals:
+                per_season[s] = vals
+        if per_season:
+            out[h3] = per_season
+    return out
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     src_name, src = _resolve_source()
@@ -312,6 +384,16 @@ def main() -> None:
     arcs = _load_arcs(src)
     _dump(OUT / "arcs.json", arcs)
     print(f"OK arcs.json: {len(arcs):,} Sedona-built OD arcs")
+
+    # --- seasonal sidecar: lazy seasons.json (nested per-(h3 x season), short keys)
+    # Three calendar month-windows (feb/may/jun), NOT a climate average. Loaded by
+    # the browser ONLY when a non-Pooled season is selected (mirror of rhythm.json).
+    seasons = _load_seasonal(src)
+    if seasons:
+        _dump(OUT / "seasons.json", seasons)
+        print(f"OK seasons.json: {len(seasons):,} hexes x up to {len(SEASON_KEYS)} month-windows")
+    else:
+        print("·· seasons.json: no seasonal_long parquet — skipped (rerun pipeline to emit)")
 
     # --- manifest: extend coverage + mobility stats + typology legend --------
     manifest_path = OUT / "manifest.json"
@@ -352,6 +434,40 @@ def main() -> None:
     # fecha 20250201..20250630, distritos zoning.
     manifest["mobility_window"] = _derive_window("distritos")
     manifest["mobility_method"] = "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
+
+    # --- SEASONAL block: month-window comparison contract (honest labelling) ----
+    # The 3 windows are NOT climate seasons — they are three calendar month-windows.
+    # The human labels (winter·Feb / spring·May / summer-onset·Jun) live HERE +
+    # in the UI, never in the data (the data uses the unambiguous feb/may/jun key).
+    if seasons:
+        manifest["seasonal"] = {
+            "windows": SEASON_WINDOWS,
+            "pooled_label": "Pooled (all 89 days)",
+            "metrics": [
+                "weekend_weekday_ratio", "weekend_hotspot_score",
+                "leisure_share", "commute_share",
+                "am_peak_share", "pm_peak_share", "midday_share", "night_share",
+                "peak_hour_bucket",
+            ],
+            "short_keys": {m: s for m, s, _ in SEASON_METRICS},
+            "delta": {
+                "column": "weekend_hotspot_summer_minus_winter",
+                "label": "Weekend pull: summer-onset − winter (Jun−Feb)",
+            },
+            "ratio_delta": {
+                "column": "weekend_ratio_summer_minus_winter",
+                "label": "Weekend ÷ weekday ratio: summer-onset − winter (Jun−Feb)",
+            },
+            "sidecar": "seasons.json",
+            "note": "three calendar month-windows, NOT a climate/seasonal average",
+        }
+        # Delta describe() for the headline diverging legend domain.
+        for dc in ("weekend_hotspot_summer_minus_winter", "weekend_ratio_summer_minus_winter"):
+            if dc in merged.columns:
+                d = merged[dc].astype(float).describe()
+                mstats[dc] = {k: round(float(d[k]), 3) for k in ("min", "50%", "max", "mean")}
+        manifest["mobility_stats"] = mstats
+
     manifest["version"] = "v3-mobility"
 
     manifest_path.write_text(
