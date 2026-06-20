@@ -1,0 +1,9 @@
+# Node deps + Playwright browser binaries (re-installed via `npm install`).
+node_modules/
+
+# Screenshot proof artifacts are regenerated on every run; don't commit them.
+proof/
+
+# npm noise
+npm-debug.log*
+package-lock.json

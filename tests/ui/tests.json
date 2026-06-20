@@ -1,0 +1,1074 @@
+{
+  "_about": "Machine-readable UI regression spec for docs/explore.html (deck.gl geo-browser). Consumed by tests/ui/run-slice.mjs. Each test has {id, slice, description, steps[], pass_criteria}. Steps share a small vocabulary the runner understands; see _step_vocabulary. Assertions (expect) read live app state from window.gb so an EXTERNAL ADVERSARIAL REVIEWER can trust a PASS without eyeballing every pixel — but every step also records a screenshot for visual audit.",
+  "_step_vocabulary": {
+    "goto": "Navigate to explore.html with this query string (deep-link). value = raw querystring WITHOUT leading '?'. Always implies waiting for map-rendered.",
+    "select": "Set <select> value then dispatch a 'change' event. selector = element id, value = option value.",
+    "check": "Tick a checkbox (set checked=true, dispatch 'change'). selector = element id. Runner awaits the layer toggle promise.",
+    "uncheck": "Untick a checkbox (set checked=false, dispatch 'change'). selector = element id.",
+    "range": "Set an <input type=range> value then dispatch 'input'. selector = element id, value = number 0-100.",
+    "flyTo": "Drive the deck camera via window.gb._flyTo(value) where value is a partial viewState (e.g. {zoom:11}). Used to cross the POI zoom gate. Runner waits for viewState to settle.",
+    "wait": "Sleep value milliseconds to let deck.gl finish a draw / a lazy fetch settle. Always followed by a screenshot or expect.",
+    "screenshot": "Capture full-page + #map clip into proof/<slice>/. value = base filename (no extension).",
+    "expect": "Assert live state. value is an object of assertions evaluated against window.gb / DOM in-page; see _expect_grammar. A failed expect fails the step and the test."
+  },
+  "_expect_grammar": {
+    "field": "window.gb._fieldKey === field",
+    "preset": "window.gb._preset === preset",
+    "season": "window.gb._season === season",
+    "extrude": "window.gb._extrude === extrude (bool)",
+    "fillAlphaApprox": "Math.abs(window.gb._fillAlpha - fillAlphaApprox) <= (fillAlphaTol||2)",
+    "fillAlphaTol": "tolerance for fillAlphaApprox (default 2)",
+    "basemapKey": "window.gb._basemapKey === basemapKey",
+    "layerOn": "object {hexes?,arcs?,pois?} -> window.gb._layersOn[k] === v",
+    "deckLayerIds": "every id in this array is present in window.gb.deck.props.layers.map(l=>l.id)",
+    "deckLayerAbsent": "every id in this array is ABSENT from window.gb.deck.props.layers",
+    "arcsLoaded": "Array.isArray(window.gb._arcs) && window.gb._arcs.length === arcsLoaded (exact count)",
+    "poisLoaded": "window.gb._pois is an object whose summed category lengths === poisLoaded (exact count)",
+    "zoomAtLeast": "window.gb._viewState.zoom >= zoomAtLeast",
+    "zoomAtMost": "window.gb._viewState.zoom <= zoomAtMost",
+    "pitchApprox": "Math.abs(window.gb._viewState.pitch - pitchApprox) <= 3",
+    "seasonDisabled": "document.getElementById('season-select').disabled === seasonDisabled (bool)",
+    "methodologyOpen": "document.getElementById('methodology').open === methodologyOpen (bool)",
+    "metricSelectValue": "document.getElementById('metric-select').value === metricSelectValue",
+    "presetSelectValue": "document.getElementById('preset-select').value === presetSelectValue",
+    "opacityReadout": "document.getElementById('hex-opacity-val').textContent === opacityReadout",
+    "extrudeHintOn": "document.getElementById('extrude-hint').classList.contains('is-on') === extrudeHintOn",
+    "canvasRendered": "analyzeCanvas distinctColors >= (canvasMinColors||12) and opaque>0 (true => map is non-blank). HARNESS LIMITATION: analyzeCanvas samples ONLY the deck.gl #map-deck canvas, NOT the MapLibre basemap canvas stacked beneath it. So this assertion proves the DECK overlay drew (hexes/arcs/pois). It MUST NOT be asserted for states where the deck is intentionally empty/transparent (hex opacity 0, or hexes toggled off) — there the satellite still shows on its own canvas and the full-page screenshot is the proof instead.",
+    "canvasMinColors": "override the distinct-color floor for canvasRendered",
+    "noConsoleErrors": "true => no console.error and no pageerror were emitted at any point up to this step",
+    "arcLayerProps": "object asserted against the live ArcLayer props: {greatCircle?, getHeightDefined?, srcAlpha?, tgtAlpha?, widthSpread?}. greatCircle compares ArcLayer.props.greatCircle; getHeightDefined asserts getHeight accessor is defined; srcAlpha/tgtAlpha compare the 4th channel of getSourceColor/getTargetColor when they are static arrays; widthSpread => (maxWidth-minWidth over the loaded arcs) >= value, proving a visible thin->thick gradient.",
+    "poiCountVisible": "number of rendered POI points actually drawn (sum of data lengths across deck layers whose id starts with 'pois-') === poiCountVisible"
+  },
+  "tests": [
+    {
+      "id": "BASE-001-default-load",
+      "slice": "presets",
+      "description": "Cold load with no query params: hexes on, satellite basemap, score/default preset, opacity 73%, season disabled, map non-blank, zero console errors. This is the canonical baseline every reviewer compares against.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1500 },
+        { "action": "screenshot", "value": "baseline" },
+        { "action": "expect", "value": { "field": "score", "preset": "default", "season": "", "extrude": false, "basemapKey": "satellite", "fillAlphaApprox": 186, "fillAlphaTol": 3, "layerOn": { "hexes": true, "arcs": false, "pois": false }, "deckLayerIds": ["hexes"], "deckLayerAbsent": ["arcs"], "seasonDisabled": true, "metricSelectValue": "score", "presetSelectValue": "default", "opacityReadout": "73%", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Map renders non-blank at the Catalonia-wide default view; all default control states match; no console errors."
+    },
+    {
+      "id": "PRESET-001-default",
+      "slice": "presets",
+      "description": "Score preset = default (balanced). Recolour hexes by score_default.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "preset-select", "value": "default", "wait": 700 },
+        { "action": "screenshot", "value": "preset-default" },
+        { "action": "expect", "value": { "preset": "default", "field": "score", "metricSelectValue": "score", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Preset applied, metric reset to score, hexes recolour, non-blank, no errors."
+    },
+    {
+      "id": "PRESET-002-nature-first",
+      "slice": "presets",
+      "description": "Score preset = nature_first (green/sea/quiet up-weighted).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "preset-select", "value": "nature_first", "wait": 700 },
+        { "action": "screenshot", "value": "preset-nature-first" },
+        { "action": "expect", "value": { "preset": "nature_first", "field": "score", "metricSelectValue": "score", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "nature_first preset active, score view, hexes recolour vs default, non-blank, no errors."
+    },
+    {
+      "id": "PRESET-003-quiet-strict",
+      "slice": "presets",
+      "description": "Score preset = quiet_strict (hard noise & industry penalty).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "preset-select", "value": "quiet_strict", "wait": 700 },
+        { "action": "screenshot", "value": "preset-quiet-strict" },
+        { "action": "expect", "value": { "preset": "quiet_strict", "field": "score", "metricSelectValue": "score", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "quiet_strict preset active, score view, non-blank, no errors."
+    },
+    {
+      "id": "PRESET-004-amenity-first",
+      "slice": "presets",
+      "description": "Score preset = amenity_first (climbing/yoga/transit up-weighted).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "preset-select", "value": "amenity_first", "wait": 700 },
+        { "action": "screenshot", "value": "preset-amenity-first" },
+        { "action": "expect", "value": { "preset": "amenity_first", "field": "score", "metricSelectValue": "score", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "amenity_first preset active, score view, non-blank, no errors."
+    },
+    {
+      "id": "PRESET-005-preset-then-back-to-default",
+      "slice": "presets",
+      "description": "ORDERING: cycle nature_first -> amenity_first -> default and confirm each preset cleanly supersedes the previous (no stale field, metric stays 'score').",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "preset-select", "value": "nature_first", "wait": 500 },
+        { "action": "select", "selector": "preset-select", "value": "amenity_first", "wait": 500 },
+        { "action": "select", "selector": "preset-select", "value": "default", "wait": 600 },
+        { "action": "screenshot", "value": "preset-cycle-default" },
+        { "action": "expect", "value": { "preset": "default", "field": "score", "metricSelectValue": "score", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Final state is default/score; preset changes are idempotent and order-independent; no errors."
+    },
+    {
+      "id": "PRESET-006-metric-then-preset-resets-to-score",
+      "slice": "presets",
+      "description": "ORDERING: pick a non-score metric (no2_ugm3), THEN change preset; the preset change must snap metric-select back to 'score' and field back to score.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "no2_ugm3", "wait": 500 },
+        { "action": "expect", "value": { "field": "no2_ugm3", "metricSelectValue": "no2_ugm3" } },
+        { "action": "select", "selector": "preset-select", "value": "quiet_strict", "wait": 600 },
+        { "action": "screenshot", "value": "metric-then-preset" },
+        { "action": "expect", "value": { "preset": "quiet_strict", "field": "score", "metricSelectValue": "score", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "After choosing a metric then a preset, metric-select reads 'score' and field is score under quiet_strict; no errors."
+    },
+
+    {
+      "id": "MET-A-001-mobility-typology",
+      "slice": "score-fields-A",
+      "description": "Recolour by mobility_typology (categorical). Season control should ENABLE if field is seasonal; assert field active + non-blank.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "mobility_typology", "wait": 700 },
+        { "action": "screenshot", "value": "met-mobility-typology" },
+        { "action": "expect", "value": { "field": "mobility_typology", "metricSelectValue": "mobility_typology", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "mobility_typology field active, categorical legend, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-002-peak-hour-bucket",
+      "slice": "score-fields-A",
+      "description": "Recolour by peak_hour_bucket (categorical, rhythm field -> lazy-loads rhythm.json).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "peak_hour_bucket", "wait": 1500 },
+        { "action": "screenshot", "value": "met-peak-hour-bucket" },
+        { "action": "expect", "value": { "field": "peak_hour_bucket", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "peak_hour_bucket active, season-aware (enabled), rhythm.json fetched without error, non-blank."
+    },
+    {
+      "id": "MET-A-003-am-peak-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by am_peak_share (07-09h, seasonal rhythm field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "am_peak_share", "wait": 1500 },
+        { "action": "screenshot", "value": "met-am-peak-share" },
+        { "action": "expect", "value": { "field": "am_peak_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "am_peak_share active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-004-pm-peak-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by pm_peak_share (17-20h, seasonal).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "pm_peak_share", "wait": 1500 },
+        { "action": "screenshot", "value": "met-pm-peak-share" },
+        { "action": "expect", "value": { "field": "pm_peak_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "pm_peak_share active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-005-night-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by night_share (22-05h, seasonal rhythm field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "night_share", "wait": 1500 },
+        { "action": "screenshot", "value": "met-night-share" },
+        { "action": "expect", "value": { "field": "night_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "night_share active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-006-weekend-weekday-ratio",
+      "slice": "score-fields-A",
+      "description": "Recolour by weekend_weekday_ratio (diverging, seasonal).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 700 },
+        { "action": "screenshot", "value": "met-weekend-weekday-ratio" },
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "weekend_weekday_ratio active, diverging ramp, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-007-weekend-hotspot-score",
+      "slice": "score-fields-A",
+      "description": "Recolour by weekend_hotspot_score (diverging, seasonal).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_hotspot_score", "wait": 700 },
+        { "action": "screenshot", "value": "met-weekend-hotspot-score" },
+        { "action": "expect", "value": { "field": "weekend_hotspot_score", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "weekend_hotspot_score active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-008-weekend-hotspot-jun-minus-feb",
+      "slice": "score-fields-A",
+      "description": "Recolour by weekend_hotspot_summer_minus_winter (Jun-Feb diverging, inline pooled column).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_hotspot_summer_minus_winter", "wait": 700 },
+        { "action": "screenshot", "value": "met-weekend-hotspot-jun-minus-feb" },
+        { "action": "expect", "value": { "field": "weekend_hotspot_summer_minus_winter", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "weekend_hotspot_summer_minus_winter active, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-009-weekend-ratio-jun-minus-feb",
+      "slice": "score-fields-A",
+      "description": "Recolour by weekend_ratio_summer_minus_winter (Jun-Feb diverging, inline pooled column).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_ratio_summer_minus_winter", "wait": 700 },
+        { "action": "screenshot", "value": "met-weekend-ratio-jun-minus-feb" },
+        { "action": "expect", "value": { "field": "weekend_ratio_summer_minus_winter", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "weekend_ratio_summer_minus_winter active, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-010-leisure-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by leisure_share (seasonal activity share).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "leisure_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-leisure-share" },
+        { "action": "expect", "value": { "field": "leisure_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "leisure_share active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-011-commute-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by commute_share (seasonal activity share).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "commute_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-commute-share" },
+        { "action": "expect", "value": { "field": "commute_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "commute_share active, season enabled, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-012-midday-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by midday_share (11-15h, seasonal rhythm field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "midday_share", "wait": 1500 },
+        { "action": "screenshot", "value": "met-midday-share" },
+        { "action": "expect", "value": { "field": "midday_share", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "midday_share active, season enabled, rhythm fetched, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-013-intra-zone-share",
+      "slice": "score-fields-A",
+      "description": "Recolour by intra_zone_share (self-containment).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "intra_zone_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-intra-zone-share" },
+        { "action": "expect", "value": { "field": "intra_zone_share", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "intra_zone_share active, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-014-geodemo-diversity",
+      "slice": "score-fields-A",
+      "description": "Recolour by geodemo_diversity (entropy).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "geodemo_diversity", "wait": 700 },
+        { "action": "screenshot", "value": "met-geodemo-diversity" },
+        { "action": "expect", "value": { "field": "geodemo_diversity", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "geodemo_diversity active, non-blank, no errors."
+    },
+    {
+      "id": "MET-A-015-typology-then-score-roundtrip",
+      "slice": "score-fields-A",
+      "description": "ORDERING: typology metric -> back to 'score' metric; confirm score view restores under current preset and season control greys again.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "mobility_typology", "wait": 600 },
+        { "action": "select", "selector": "metric-select", "value": "score", "wait": 600 },
+        { "action": "screenshot", "value": "met-roundtrip-score" },
+        { "action": "expect", "value": { "field": "score", "metricSelectValue": "score", "seasonDisabled": true, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Returning to 'score' restores the score field and re-greys season; no errors."
+    },
+
+    {
+      "id": "MET-B-001-low-income-inflow-share",
+      "slice": "score-fields-B",
+      "description": "Recolour by low_income_inflow_share.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "low_income_inflow_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-low-income-inflow-share" },
+        { "action": "expect", "value": { "field": "low_income_inflow_share", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "low_income_inflow_share active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-002-youth-mobility-share",
+      "slice": "score-fields-B",
+      "description": "Recolour by youth_mobility_share (0-25 inflow).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "youth_mobility_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-youth-mobility-share" },
+        { "action": "expect", "value": { "field": "youth_mobility_share", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "youth_mobility_share active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-003-senior-mobility-share",
+      "slice": "score-fields-B",
+      "description": "Recolour by senior_mobility_share (65+ inflow).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "senior_mobility_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-senior-mobility-share" },
+        { "action": "expect", "value": { "field": "senior_mobility_share", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "senior_mobility_share active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-004-female-share",
+      "slice": "score-fields-B",
+      "description": "Recolour by female_share (female inflow).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "female_share", "wait": 700 },
+        { "action": "screenshot", "value": "met-female-share" },
+        { "action": "expect", "value": { "field": "female_share", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "female_share active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-005-support-n",
+      "slice": "score-fields-B",
+      "description": "Recolour by support_n (OD-segment row count, density proxy).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "support_n", "wait": 700 },
+        { "action": "screenshot", "value": "met-support-n" },
+        { "action": "expect", "value": { "field": "support_n", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "support_n active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-006-mitma-inflow-daily",
+      "slice": "score-fields-B",
+      "description": "Recolour by mitma_inflow_daily (trips/day).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "mitma_inflow_daily", "wait": 700 },
+        { "action": "screenshot", "value": "met-mitma-inflow-daily" },
+        { "action": "expect", "value": { "field": "mitma_inflow_daily", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "mitma_inflow_daily active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-007-mitma-through-ratio",
+      "slice": "score-fields-B",
+      "description": "Recolour by mitma_through_ratio (sink<->source, diverging). Low-chroma field at the Catalonia-wide view (narrow value band + grey nulls), so canvasMinColors is lowered to 3 — the real blank-detector here is opaqueSamples>0, which proves the hexes drew.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "mitma_through_ratio", "wait": 700 },
+        { "action": "screenshot", "value": "met-mitma-through-ratio" },
+        { "action": "expect", "value": { "field": "mitma_through_ratio", "canvasRendered": true, "canvasMinColors": 3, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "mitma_through_ratio active, diverging, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-008-train-reach-min",
+      "slice": "score-fields-B",
+      "description": "Recolour by train_reach_min (presence field, ~78% null/grey expected).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "train_reach_min", "wait": 700 },
+        { "action": "screenshot", "value": "met-train-reach-min" },
+        { "action": "expect", "value": { "field": "train_reach_min", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "train_reach_min active; sparse coverage with grey nulls; non-blank; no errors."
+    },
+    {
+      "id": "MET-B-009-trains-to-bcn-nearest",
+      "slice": "score-fields-B",
+      "description": "Recolour by trains_to_bcn_nearest (trains/day to BCN core).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "trains_to_bcn_nearest", "wait": 700 },
+        { "action": "screenshot", "value": "met-trains-to-bcn-nearest" },
+        { "action": "expect", "value": { "field": "trains_to_bcn_nearest", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "trains_to_bcn_nearest active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-010-climb-min-m",
+      "slice": "score-fields-B",
+      "description": "Recolour by climb_min_m (climbing gym proximity, presence field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "climb_min_m", "wait": 700 },
+        { "action": "screenshot", "value": "met-climb-min-m" },
+        { "action": "expect", "value": { "field": "climb_min_m", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "climb_min_m active, sparse coverage, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-011-tree-cover-pct",
+      "slice": "score-fields-B",
+      "description": "Recolour by tree_cover_pct (EEA TCD).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "tree_cover_pct", "wait": 700 },
+        { "action": "screenshot", "value": "met-tree-cover-pct" },
+        { "action": "expect", "value": { "field": "tree_cover_pct", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "tree_cover_pct active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-012-natura2000-within-5km",
+      "slice": "score-fields-B",
+      "description": "Recolour by natura2000_within_5km.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "natura2000_within_5km", "wait": 700 },
+        { "action": "screenshot", "value": "met-natura2000-within-5km" },
+        { "action": "expect", "value": { "field": "natura2000_within_5km", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "natura2000_within_5km active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-013-biodiversity-obs-density",
+      "slice": "score-fields-B",
+      "description": "Recolour by biodiversity_obs_density (iNat /km2).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "biodiversity_obs_density", "wait": 700 },
+        { "action": "screenshot", "value": "met-biodiversity-obs-density" },
+        { "action": "expect", "value": { "field": "biodiversity_obs_density", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "biodiversity_obs_density active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-014-no2",
+      "slice": "score-fields-B",
+      "description": "Recolour by no2_ugm3 (penalty field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "no2_ugm3", "wait": 700 },
+        { "action": "screenshot", "value": "met-no2" },
+        { "action": "expect", "value": { "field": "no2_ugm3", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "no2_ugm3 active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-015-pm25",
+      "slice": "score-fields-B",
+      "description": "Recolour by pm25_ugm3 (penalty field).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "pm25_ugm3", "wait": 700 },
+        { "action": "screenshot", "value": "met-pm25" },
+        { "action": "expect", "value": { "field": "pm25_ugm3", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "pm25_ugm3 active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-016-uhi-delta-c",
+      "slice": "score-fields-B",
+      "description": "Recolour by uhi_delta_c (urban heat island, penalty).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "uhi_delta_c", "wait": 700 },
+        { "action": "screenshot", "value": "met-uhi-delta-c" },
+        { "action": "expect", "value": { "field": "uhi_delta_c", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "uhi_delta_c active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-017-viirs-radiance",
+      "slice": "score-fields-B",
+      "description": "Recolour by viirs_radiance (night-light, penalty).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "viirs_radiance", "wait": 700 },
+        { "action": "screenshot", "value": "met-viirs-radiance" },
+        { "action": "expect", "value": { "field": "viirs_radiance", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "viirs_radiance active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-018-eprtr-facility-min-m",
+      "slice": "score-fields-B",
+      "description": "Recolour by eprtr_facility_min_m (penalty, proximity).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "eprtr_facility_min_m", "wait": 700 },
+        { "action": "screenshot", "value": "met-eprtr-facility-min-m" },
+        { "action": "expect", "value": { "field": "eprtr_facility_min_m", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "eprtr_facility_min_m active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-019-industry-density",
+      "slice": "score-fields-B",
+      "description": "Recolour by industry_density_per_km2. Very sparse / single-hue field (mostly grey nulls, a few industrial hexes), so canvasMinColors is lowered to 3; opaqueSamples>0 is the meaningful non-blank proof.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "industry_density_per_km2", "wait": 700 },
+        { "action": "screenshot", "value": "met-industry-density" },
+        { "action": "expect", "value": { "field": "industry_density_per_km2", "canvasRendered": true, "canvasMinColors": 3, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "industry_density_per_km2 active, non-blank, no errors."
+    },
+    {
+      "id": "MET-B-020-motorway-within-500m",
+      "slice": "score-fields-B",
+      "description": "Recolour by motorway_within_500m.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "motorway_within_500m", "wait": 700 },
+        { "action": "screenshot", "value": "met-motorway-within-500m" },
+        { "action": "expect", "value": { "field": "motorway_within_500m", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "motorway_within_500m active, non-blank, no errors."
+    },
+
+    {
+      "id": "BM-001-satellite",
+      "slice": "basemaps-x-extrude",
+      "description": "Basemap = satellite (Esri World Imagery, default). Confirm key + non-blank + deck hexes still on top.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "dark", "wait": 800 },
+        { "action": "select", "selector": "basemap-select", "value": "satellite", "wait": 1500 },
+        { "action": "screenshot", "value": "bm-satellite" },
+        { "action": "expect", "value": { "basemapKey": "satellite", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Camera preserved, satellite raster style active, hexes overlaid, non-blank, no errors."
+    },
+    {
+      "id": "BM-002-dark",
+      "slice": "basemaps-x-extrude",
+      "description": "Basemap = dark (CARTO dark matter). Camera preserved, hexes on top.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "dark", "wait": 1500 },
+        { "action": "screenshot", "value": "bm-dark" },
+        { "action": "expect", "value": { "basemapKey": "dark", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Dark CARTO style swaps in, camera preserved, hexes overlaid, non-blank, no errors."
+    },
+    {
+      "id": "BM-003-light",
+      "slice": "basemaps-x-extrude",
+      "description": "Basemap = light (CARTO Positron).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "light", "wait": 1500 },
+        { "action": "screenshot", "value": "bm-light" },
+        { "action": "expect", "value": { "basemapKey": "light", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Positron style swaps in, camera preserved, hexes overlaid, non-blank, no errors."
+    },
+    {
+      "id": "BM-004-osm",
+      "slice": "basemaps-x-extrude",
+      "description": "Basemap = osm (OpenFreeMap Bright, may fall back to CARTO Voyager if unreachable; either is a PASS as long as the map stays non-blank and no uncaught error).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "osm", "wait": 2000 },
+        { "action": "screenshot", "value": "bm-osm" },
+        { "action": "expect", "value": { "basemapKey": "osm", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "OSM (or Voyager fallback) style active, hexes overlaid, non-blank, no UNCAUGHT errors (a style-fetch fallback is allowed and must not throw)."
+    },
+    {
+      "id": "BM-005-cycle-all-four",
+      "slice": "basemaps-x-extrude",
+      "description": "ORDERING: cycle satellite->dark->light->osm->satellite in one session; the deck hex overlay must survive every in-place style swap (no lost layer, no blank).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "dark", "wait": 900 },
+        { "action": "select", "selector": "basemap-select", "value": "light", "wait": 900 },
+        { "action": "select", "selector": "basemap-select", "value": "osm", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "satellite", "wait": 1500 },
+        { "action": "screenshot", "value": "bm-cycle-back-to-satellite" },
+        { "action": "expect", "value": { "basemapKey": "satellite", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "After cycling all four and back, hexes still render over satellite; non-blank; no errors."
+    },
+    {
+      "id": "EXT-001-extrude-on",
+      "slice": "basemaps-x-extrude",
+      "description": "2.5D extrude ON: pitch tilts to ~45, hexes extrude by active field, 3D-nav hint becomes visible.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-extrude", "wait": 1200 },
+        { "action": "screenshot", "value": "ext-on" },
+        { "action": "expect", "value": { "extrude": true, "pitchApprox": 45, "extrudeHintOn": true, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Extrude flag set, camera pitched ~45, hint visible, towers render, non-blank, no errors."
+    },
+    {
+      "id": "EXT-002-extrude-off-restores-pitch",
+      "slice": "basemaps-x-extrude",
+      "description": "ORDERING: extrude ON then OFF; pitch must return to ~0 and hint hide.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-extrude", "wait": 900 },
+        { "action": "uncheck", "selector": "toggle-extrude", "wait": 900 },
+        { "action": "screenshot", "value": "ext-off" },
+        { "action": "expect", "value": { "extrude": false, "pitchApprox": 0, "extrudeHintOn": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Extrude off restores flat pitch and hides hint; non-blank; no errors."
+    },
+    {
+      "id": "EXT-003-extrude-x-dark-basemap",
+      "slice": "basemaps-x-extrude",
+      "description": "SEQUENCE: dark basemap THEN extrude on; towers must read over dark CARTO with pitch ~45.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "basemap-select", "value": "dark", "wait": 1200 },
+        { "action": "check", "selector": "toggle-extrude", "wait": 1200 },
+        { "action": "screenshot", "value": "ext-dark-combo" },
+        { "action": "expect", "value": { "basemapKey": "dark", "extrude": true, "pitchApprox": 45, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Dark basemap + extruded towers render together; non-blank; no errors."
+    },
+    {
+      "id": "EXT-004-extrude-x-metric",
+      "slice": "basemaps-x-extrude",
+      "description": "SEQUENCE: pick mitma_inflow_daily metric THEN extrude on; tower heights track the chosen field (visual audit) and field stays set.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "mitma_inflow_daily", "wait": 700 },
+        { "action": "check", "selector": "toggle-extrude", "wait": 1200 },
+        { "action": "screenshot", "value": "ext-metric-combo" },
+        { "action": "expect", "value": { "field": "mitma_inflow_daily", "extrude": true, "pitchApprox": 45, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Extruded by mitma_inflow_daily; field + extrude both hold; non-blank; no errors."
+    },
+
+    {
+      "id": "OPA-001-opacity-0",
+      "slice": "arcs-amenities-opacity",
+      "description": "Hex opacity slider to 0%: fillAlpha ~0, satellite reads fully through, readout '0%'. NOTE the canvas check (analyzeCanvas) samples ONLY the deck #map-deck canvas, NOT the MapLibre basemap canvas underneath; at alpha 0 the deck canvas is correctly transparent (hexes invisible) while the satellite still shows on its own layer. So we assert the DECK STATE (fillAlpha 0, hex layer still present) and the full-page screenshot is the proof the satellite reads through — we deliberately do NOT assert canvasRendered on the deck canvas here because a near-empty deck canvas is the EXPECTED result of 0 opacity.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "range", "selector": "hex-opacity", "value": 0, "wait": 700 },
+        { "action": "screenshot", "value": "opa-0" },
+        { "action": "expect", "value": { "fillAlphaApprox": 0, "fillAlphaTol": 1, "opacityReadout": "0%", "deckLayerIds": ["hexes"], "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "fillAlpha 0, readout 0%, hex layer still present (just transparent), satellite visible through hexes (see opa-0.png full-page proof), no errors."
+    },
+    {
+      "id": "OPA-002-opacity-100",
+      "slice": "arcs-amenities-opacity",
+      "description": "Hex opacity slider to 100%: fillAlpha ~255, hexes fully opaque, readout '100%'.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "range", "selector": "hex-opacity", "value": 100, "wait": 700 },
+        { "action": "screenshot", "value": "opa-100" },
+        { "action": "expect", "value": { "fillAlphaApprox": 255, "fillAlphaTol": 1, "opacityReadout": "100%", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "fillAlpha 255, readout 100%, opaque hexes, non-blank, no errors."
+    },
+    {
+      "id": "OPA-003-opacity-50-roundtrip",
+      "slice": "arcs-amenities-opacity",
+      "description": "ORDERING: 100 -> 0 -> 50; final fillAlpha ~128 and readout '50%' (slider re-renders in place, no re-fetch).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "range", "selector": "hex-opacity", "value": 100, "wait": 400 },
+        { "action": "range", "selector": "hex-opacity", "value": 0, "wait": 400 },
+        { "action": "range", "selector": "hex-opacity", "value": 50, "wait": 600 },
+        { "action": "screenshot", "value": "opa-50" },
+        { "action": "expect", "value": { "fillAlphaApprox": 128, "fillAlphaTol": 2, "opacityReadout": "50%", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Final fillAlpha ~128 / readout 50%; in-place recolour; no errors."
+    },
+    {
+      "id": "ARC-001-arcs-on-load-render",
+      "slice": "arcs-amenities-opacity",
+      "description": "MITMA OD arcs ON: lazy-fetch arcs.json (250 arcs), ArcLayer added to deck, non-blank. Proves the layer loads + renders end to end.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
+        { "action": "screenshot", "value": "arc-on" },
+        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "arcs.json fetched (250), ArcLayer present in deck.props.layers, non-blank, checkbox stayed checked (no fetch revert), no errors."
+    },
+    {
+      "id": "ARC-002-arcs-look-regression",
+      "slice": "arcs-amenities-opacity",
+      "description": "BUG REGRESSION (bug_arcs): assert the RENDERED arc LOOK, not just presence. Captures the live ArcLayer props. Documents the CURRENT degraded config (greatCircle:false, no getHeight, alpha 190, width formula maxes out ~10.6-12.4px on million-scale flows => no visible gradient) and FAILS once that is the case, so an adversarial reviewer sees the bug; flips to PASS only when the fix lands (greatCircle:true, getHeight defined, alpha 200, visible width spread).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
+        { "action": "screenshot", "value": "arc-look" },
+        { "action": "expect", "value": { "arcsLoaded": 250, "deckLayerIds": ["arcs"], "arcLayerProps": { "greatCircle": true, "getHeightDefined": true, "srcAlpha": 200, "tgtAlpha": 200, "widthSpread": 2.0 }, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "EXPECTED-FAIL until bug_arcs is fixed: passes only when the ArcLayer is great-circle (curved), has a defined getHeight (tall arches), source/target alpha is 200, and width spans a visible thin->thick range (max-min width over the 250 arcs >= 2.0px). On today's code this test FAILS on greatCircle/getHeight/widthSpread — that failure IS the documented regression proof. The screenshot records the flat, uniform-fat-stub look for the reviewer."
+    },
+    {
+      "id": "POI-001-amenities-on-at-default-zoom-gated",
+      "slice": "arcs-amenities-opacity",
+      "description": "BUG REGRESSION (bug_osm_amenities) part 1 — GATE BEHAVES AS DESIGNED: toggle amenities ON at the Catalonia-wide default zoom (7.6, below the z10.5 gate). Data MUST load (322 points) but ZERO POI points are drawn. This documents the UX feedback gap: the checkbox is on, data is present, yet nothing appears because z<10.5.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-pois", "wait": 1500 },
+        { "action": "screenshot", "value": "poi-gated-zoomed-out" },
+        { "action": "expect", "value": { "layerOn": { "pois": true }, "poisLoaded": 322, "zoomAtMost": 10.5, "poiCountVisible": 0, "deckLayerAbsent": ["pois-climbing", "pois-yoga", "pois-hospital"], "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "pois.json loads (322 = climbing 219 + yoga 67 + hospital 36), checkbox stays on, but NO POI scatter layers are in the deck because zoom < 10.5. This is the as-designed gate + the feedback gap, captured for the reviewer. No console errors."
+    },
+    {
+      "id": "POI-002-amenities-zoom-in-past-gate-render",
+      "slice": "arcs-amenities-opacity",
+      "description": "BUG REGRESSION (bug_osm_amenities) part 2 — PROVES LOAD+RENDER: with amenities ON, fly the camera IN past z10.5 (zoom 11). The ScatterplotLayers must now appear and draw the 322 points. Proves the data path / getPosition / colors are all correct and the only gate was zoom.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-pois", "wait": 1200 },
+        { "action": "flyTo", "value": { "longitude": 2.17, "latitude": 41.39, "zoom": 11.2 }, "wait": 1800 },
+        { "action": "screenshot", "value": "poi-zoomed-in-rendered" },
+        { "action": "expect", "value": { "layerOn": { "pois": true }, "poisLoaded": 322, "zoomAtLeast": 10.5, "poiCountVisible": 322, "deckLayerIds": ["pois-climbing", "pois-yoga", "pois-hospital"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "After zooming to z>=10.5 over Barcelona, all three POI ScatterplotLayers (climbing/yoga/hospital) are present and draw 322 points total; non-blank; no errors. This PROVES amenities load and render — the original report was a zoom-gate feedback gap, not a data/render bug."
+    },
+    {
+      "id": "POI-003-amenities-x-arcs-x-opacity-combo",
+      "slice": "arcs-amenities-opacity",
+      "description": "SEQUENCE: arcs ON + amenities ON + zoom in past gate + opacity 40; all three overlays coexist (hexes faded, arcs drawn, POIs drawn). Stress test of simultaneous lazy layers.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "check", "selector": "toggle-arcs", "wait": 1200 },
+        { "action": "check", "selector": "toggle-pois", "wait": 1200 },
+        { "action": "range", "selector": "hex-opacity", "value": 40, "wait": 500 },
+        { "action": "flyTo", "value": { "longitude": 2.17, "latitude": 41.39, "zoom": 11.2 }, "wait": 1800 },
+        { "action": "screenshot", "value": "poi-arcs-opacity-combo" },
+        { "action": "expect", "value": { "layerOn": { "arcs": true, "pois": true }, "arcsLoaded": 250, "poisLoaded": 322, "fillAlphaApprox": 102, "fillAlphaTol": 3, "deckLayerIds": ["hexes", "arcs", "pois-climbing", "pois-yoga", "pois-hospital"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Hexes (alpha ~102), arcs, and all three POI layers render together at z>10.5; non-blank; no errors."
+    },
+
+    {
+      "id": "SEA-001-season-disabled-for-score",
+      "slice": "month-window-x-season-fields",
+      "description": "Season control is DISABLED while metric is 'score' (pooled). Confirms the greying logic at default.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "screenshot", "value": "season-disabled-score" },
+        { "action": "expect", "value": { "field": "score", "seasonDisabled": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "season-select disabled under score; no errors."
+    },
+    {
+      "id": "SEA-002-season-enables-for-seasonal-field",
+      "slice": "month-window-x-season-fields",
+      "description": "Pick a season-aware field (weekend_weekday_ratio); season-select must ENABLE.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 700 },
+        { "action": "screenshot", "value": "season-enabled" },
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "seasonDisabled": false, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "season-select enabled once a seasonal field is active; no errors."
+    },
+    {
+      "id": "SEA-003-feb-window",
+      "slice": "month-window-x-season-fields",
+      "description": "Seasonal field + Month-window = feb: first non-Pooled selection lazy-loads seasons.json and re-points the field to the Feb window.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 600 },
+        { "action": "select", "selector": "season-select", "value": "feb", "wait": 2000 },
+        { "action": "screenshot", "value": "season-feb" },
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "season": "feb", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "seasons.json fetched, season='feb', hexes recolour to Feb window, non-blank, no errors."
+    },
+    {
+      "id": "SEA-004-jun-window",
+      "slice": "month-window-x-season-fields",
+      "description": "Seasonal field + Month-window = jun (summer-onset).",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 600 },
+        { "action": "select", "selector": "season-select", "value": "jun", "wait": 2000 },
+        { "action": "screenshot", "value": "season-jun" },
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "season": "jun", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "season='jun', Jun-window recolour, non-blank, no errors."
+    },
+    {
+      "id": "SEA-005-feb-jun-may-cycle",
+      "slice": "month-window-x-season-fields",
+      "description": "ORDERING: feb -> jun -> may -> pooled in one session on a seasonal field; each window recolours; returning to Pooled ('') restores the pooled inline column.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "leisure_share", "wait": 600 },
+        { "action": "select", "selector": "season-select", "value": "feb", "wait": 1800 },
+        { "action": "select", "selector": "season-select", "value": "jun", "wait": 700 },
+        { "action": "select", "selector": "season-select", "value": "may", "wait": 700 },
+        { "action": "select", "selector": "season-select", "value": "", "wait": 700 },
+        { "action": "screenshot", "value": "season-cycle-pooled" },
+        { "action": "expect", "value": { "field": "leisure_share", "season": "", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "All windows apply in sequence; returning to Pooled sets season=''; non-blank; no errors."
+    },
+    {
+      "id": "SEA-006-season-then-nonseasonal-metric-greys",
+      "slice": "month-window-x-season-fields",
+      "description": "ORDERING/STALE-STATE: set a seasonal field + feb window, THEN switch to a non-seasonal metric (no2_ugm3). Season-select must grey out again; the non-seasonal field ignores _season.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1200 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 600 },
+        { "action": "select", "selector": "season-select", "value": "feb", "wait": 1800 },
+        { "action": "select", "selector": "metric-select", "value": "no2_ugm3", "wait": 700 },
+        { "action": "screenshot", "value": "season-then-nonseasonal" },
+        { "action": "expect", "value": { "field": "no2_ugm3", "seasonDisabled": true, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Switching to a non-seasonal field re-greys season-select even though a window was previously chosen; non-blank; no errors."
+    },
+
+    {
+      "id": "DL-001-methodology",
+      "slice": "deep-links",
+      "description": "Deep-link ?methodology=1 opens & scrolls the methodology <details>.",
+      "steps": [
+        { "action": "goto", "value": "methodology=1", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-methodology" },
+        { "action": "expect", "value": { "methodologyOpen": true, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "methodology details open; map still renders; no errors."
+    },
+    {
+      "id": "DL-002-basemap-dark",
+      "slice": "deep-links",
+      "description": "Deep-link ?basemap=dark applies the dark basemap on load.",
+      "steps": [
+        { "action": "goto", "value": "basemap=dark", "wait": 1800 },
+        { "action": "screenshot", "value": "dl-basemap-dark" },
+        { "action": "expect", "value": { "basemapKey": "dark", "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads directly into dark basemap; hexes overlaid; non-blank; no errors."
+    },
+    {
+      "id": "DL-003-hexopacity-20",
+      "slice": "deep-links",
+      "description": "Deep-link ?hexopacity=20 sets the slider + fillAlpha (~51) on load.",
+      "steps": [
+        { "action": "goto", "value": "hexopacity=20", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-hexopacity-20" },
+        { "action": "expect", "value": { "fillAlphaApprox": 51, "fillAlphaTol": 2, "opacityReadout": "20%", "canvasRendered": true, "canvasMinColors": 8, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads with opacity 20% / fillAlpha ~51; readout 20%; no errors."
+    },
+    {
+      "id": "DL-004-hexopacity-clamp-over-100",
+      "slice": "deep-links",
+      "description": "EDGE: ?hexopacity=250 must clamp to 100 (parseInt + clamp 0..100).",
+      "steps": [
+        { "action": "goto", "value": "hexopacity=250", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-hexopacity-clamp" },
+        { "action": "expect", "value": { "fillAlphaApprox": 255, "fillAlphaTol": 1, "opacityReadout": "100%", "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Out-of-range opacity clamps to 100%; no errors."
+    },
+    {
+      "id": "DL-005-preset-nature-first",
+      "slice": "deep-links",
+      "description": "Deep-link ?preset=nature_first applies the preset on load.",
+      "steps": [
+        { "action": "goto", "value": "preset=nature_first", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-preset-nature-first" },
+        { "action": "expect", "value": { "preset": "nature_first", "field": "score", "presetSelectValue": "nature_first", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads into nature_first/score; non-blank; no errors."
+    },
+    {
+      "id": "DL-006-metric-dropdown-value",
+      "slice": "deep-links",
+      "description": "Deep-link ?metric=tree_cover_pct (a dropdown option) recolours on load.",
+      "steps": [
+        { "action": "goto", "value": "metric=tree_cover_pct", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-metric-tree-cover" },
+        { "action": "expect", "value": { "field": "tree_cover_pct", "metricSelectValue": "tree_cover_pct", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads recoloured by tree_cover_pct; dropdown reflects it; non-blank; no errors."
+    },
+    {
+      "id": "DL-007-metric-jsonly-key",
+      "slice": "deep-links",
+      "description": "EDGE: ?metric=green_min_m is a FIELDS key NOT in the dropdown. The deep-link guard requires the value to match a <select> option, so this must NO-OP and stay on 'score' (proves the guard rejects JS-only keys via the dropdown path).",
+      "steps": [
+        { "action": "goto", "value": "metric=green_min_m", "wait": 1500 },
+        { "action": "screenshot", "value": "dl-metric-jsonly-noop" },
+        { "action": "expect", "value": { "field": "score", "metricSelectValue": "score", "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "JS-only metric key not present in the dropdown is rejected by the deep-link guard; field stays 'score'; no errors. (Documents that green_min_m/yoga_min_m/etc. are NOT reachable via ?metric= despite being in FIELDS — the param guard checks dropdown options.)"
+    },
+    {
+      "id": "DL-008-season-jun-with-seasonal-metric",
+      "slice": "deep-links",
+      "description": "Deep-link combo ?metric=leisure_share&season=jun applies a seasonal field AND its Jun window on load (order of param application: metric fires before season).",
+      "steps": [
+        { "action": "goto", "value": "metric=leisure_share&season=jun", "wait": 2200 },
+        { "action": "screenshot", "value": "dl-metric-season-combo" },
+        { "action": "expect", "value": { "field": "leisure_share", "season": "jun", "seasonDisabled": false, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads into leisure_share + Jun window; season enabled; non-blank; no errors."
+    },
+    {
+      "id": "DL-009-extrude-flag",
+      "slice": "deep-links",
+      "description": "Deep-link ?extrude=1 ticks extrude on load (pitch ~45, hint visible).",
+      "steps": [
+        { "action": "goto", "value": "extrude=1", "wait": 1800 },
+        { "action": "screenshot", "value": "dl-extrude" },
+        { "action": "expect", "value": { "extrude": true, "pitchApprox": 45, "extrudeHintOn": true, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads extruded with pitch ~45 and hint on; non-blank; no errors."
+    },
+    {
+      "id": "DL-010-arcs-flag",
+      "slice": "deep-links",
+      "description": "Deep-link ?arcs=1 ticks arcs on load and lazy-loads arcs.json.",
+      "steps": [
+        { "action": "goto", "value": "arcs=1", "wait": 2200 },
+        { "action": "screenshot", "value": "dl-arcs" },
+        { "action": "expect", "value": { "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads with arcs on (250 fetched, ArcLayer in deck); non-blank; no errors."
+    },
+    {
+      "id": "DL-011-pois-flag-gated",
+      "slice": "deep-links",
+      "description": "Deep-link ?pois=1 ticks amenities on load; data loads (322) but at the default z7.6 NO points draw (the documented gate). Companion to POI-002 which zooms in.",
+      "steps": [
+        { "action": "goto", "value": "pois=1", "wait": 2200 },
+        { "action": "screenshot", "value": "dl-pois-gated" },
+        { "action": "expect", "value": { "layerOn": { "pois": true }, "poisLoaded": 322, "zoomAtMost": 10.5, "poiCountVisible": 0, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Loads with amenities on + data fetched, but zero points draw at default zoom (gate); non-blank (hexes/basemap); no errors."
+    },
+    {
+      "id": "DL-012-full-combo-deeplink",
+      "slice": "deep-links",
+      "description": "Deep-link KITCHEN SINK: ?basemap=dark&hexopacity=60&preset=amenity_first&extrude=1&methodology=1 — many params at once must all apply coherently on load.",
+      "steps": [
+        { "action": "goto", "value": "basemap=dark&hexopacity=60&preset=amenity_first&extrude=1&methodology=1", "wait": 2400 },
+        { "action": "screenshot", "value": "dl-kitchen-sink" },
+        { "action": "expect", "value": { "basemapKey": "dark", "fillAlphaApprox": 153, "fillAlphaTol": 3, "opacityReadout": "60%", "preset": "amenity_first", "extrude": true, "pitchApprox": 45, "methodologyOpen": true, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "All five params apply together: dark basemap, opacity 60%, amenity_first preset, extruded pitch ~45, methodology open; non-blank; no errors."
+    },
+
+    {
+      "id": "JOURNEY-001-relocation-scout",
+      "slice": "full-user-journeys",
+      "description": "REALISTIC JOURNEY: a relocation scout explores liveability. Default load -> nature_first preset -> dark basemap -> drop opacity to 60 to read terrain -> recolour by tree_cover_pct -> back to score. Mimics natural click-through with no resets.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1300 },
+        { "action": "select", "selector": "preset-select", "value": "nature_first", "wait": 600 },
+        { "action": "select", "selector": "basemap-select", "value": "dark", "wait": 1200 },
+        { "action": "range", "selector": "hex-opacity", "value": 60, "wait": 500 },
+        { "action": "screenshot", "value": "journey1-nature-dark-60" },
+        { "action": "select", "selector": "metric-select", "value": "tree_cover_pct", "wait": 700 },
+        { "action": "screenshot", "value": "journey1-tree-cover" },
+        { "action": "select", "selector": "metric-select", "value": "score", "wait": 600 },
+        { "action": "screenshot", "value": "journey1-back-to-score" },
+        { "action": "expect", "value": { "preset": "nature_first", "field": "score", "basemapKey": "dark", "fillAlphaApprox": 153, "fillAlphaTol": 3, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Whole journey holds coherent state; final = nature_first/score on dark at 60%; every screenshot non-blank; no errors throughout."
+    },
+    {
+      "id": "JOURNEY-002-mobility-analyst-seasonal",
+      "slice": "full-user-journeys",
+      "description": "REALISTIC JOURNEY: a mobility analyst. Default -> weekend_weekday_ratio -> enable Feb window -> switch to Jun window (compare) -> turn arcs on to see OD corridors -> back to pooled. Exercises seasonal lazy-load + arcs together.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1300 },
+        { "action": "select", "selector": "metric-select", "value": "weekend_weekday_ratio", "wait": 600 },
+        { "action": "select", "selector": "season-select", "value": "feb", "wait": 1900 },
+        { "action": "screenshot", "value": "journey2-feb" },
+        { "action": "select", "selector": "season-select", "value": "jun", "wait": 700 },
+        { "action": "screenshot", "value": "journey2-jun" },
+        { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
+        { "action": "screenshot", "value": "journey2-jun-arcs" },
+        { "action": "select", "selector": "season-select", "value": "", "wait": 700 },
+        { "action": "screenshot", "value": "journey2-pooled" },
+        { "action": "expect", "value": { "field": "weekend_weekday_ratio", "season": "", "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Seasonal compare (Feb->Jun->pooled) + arcs overlay all hold; final pooled with arcs on; every shot non-blank; no errors."
+    },
+    {
+      "id": "JOURNEY-003-amenity-hunter-zoom-in",
+      "slice": "full-user-journeys",
+      "description": "REALISTIC JOURNEY: an amenity hunter. Default -> amenity_first preset -> turn amenities on (nothing shows at wide zoom) -> zoom INTO Barcelona past the gate (points appear) -> extrude on for 2.5D. Directly walks the OSM-amenities zoom-gate UX path end to end.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1300 },
+        { "action": "select", "selector": "preset-select", "value": "amenity_first", "wait": 600 },
+        { "action": "check", "selector": "toggle-pois", "wait": 1300 },
+        { "action": "screenshot", "value": "journey3-pois-on-wide" },
+        { "action": "expect", "value": { "poisLoaded": 322, "poiCountVisible": 0, "zoomAtMost": 10.5 } },
+        { "action": "flyTo", "value": { "longitude": 2.17, "latitude": 41.39, "zoom": 11.2 }, "wait": 1800 },
+        { "action": "screenshot", "value": "journey3-pois-zoomed-in" },
+        { "action": "expect", "value": { "poiCountVisible": 322, "zoomAtLeast": 10.5, "deckLayerIds": ["pois-climbing", "pois-yoga", "pois-hospital"] } },
+        { "action": "check", "selector": "toggle-extrude", "wait": 1200 },
+        { "action": "screenshot", "value": "journey3-pois-extruded" },
+        { "action": "expect", "value": { "preset": "amenity_first", "extrude": true, "pitchApprox": 45, "layerOn": { "pois": true }, "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Wide-zoom amenities-on shows zero points (gate); after zoom-in all 322 draw; extrude then tilts to 2.5D with POIs still on; every screenshot non-blank; no errors."
+    },
+    {
+      "id": "JOURNEY-004-share-link-restore",
+      "slice": "full-user-journeys",
+      "description": "REALISTIC JOURNEY: someone opens a SHARED deep-link state, then continues clicking. Load ?basemap=light&preset=quiet_strict&hexopacity=85 -> recolour by no2_ugm3 -> turn arcs on. Proves deep-link state is a valid starting point for further interaction (no state corruption).",
+      "steps": [
+        { "action": "goto", "value": "basemap=light&preset=quiet_strict&hexopacity=85", "wait": 2000 },
+        { "action": "screenshot", "value": "journey4-restored" },
+        { "action": "expect", "value": { "basemapKey": "light", "preset": "quiet_strict", "fillAlphaApprox": 217, "fillAlphaTol": 3, "opacityReadout": "85%" } },
+        { "action": "select", "selector": "metric-select", "value": "no2_ugm3", "wait": 700 },
+        { "action": "screenshot", "value": "journey4-no2" },
+        { "action": "check", "selector": "toggle-arcs", "wait": 1500 },
+        { "action": "screenshot", "value": "journey4-no2-arcs" },
+        { "action": "expect", "value": { "basemapKey": "light", "field": "no2_ugm3", "layerOn": { "arcs": true }, "arcsLoaded": 250, "deckLayerIds": ["hexes", "arcs"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Shared state restores, then further clicks (metric + arcs) apply cleanly on top; final light/no2 with arcs; non-blank; no errors."
+    },
+    {
+      "id": "JOURNEY-005-toggle-hexes-off-on",
+      "slice": "full-user-journeys",
+      "description": "REALISTIC JOURNEY + EDGE: user unticks the Liveability hexes to see the basemap alone, then re-ticks. With hexes off the hex layer must leave the deck; with them back on it must return and recolour. Covers the #toggle-hexes control which no single test owns elsewhere.",
+      "steps": [
+        { "action": "goto", "value": "", "wait": 1300 },
+        { "action": "uncheck", "selector": "toggle-hexes", "wait": 700 },
+        { "action": "screenshot", "value": "journey5-hexes-off" },
+        { "action": "expect", "value": { "layerOn": { "hexes": false }, "deckLayerAbsent": ["hexes"], "noConsoleErrors": true } },
+        { "action": "check", "selector": "toggle-hexes", "wait": 700 },
+        { "action": "screenshot", "value": "journey5-hexes-back" },
+        { "action": "expect", "value": { "layerOn": { "hexes": true }, "deckLayerIds": ["hexes"], "canvasRendered": true, "noConsoleErrors": true } }
+      ],
+      "pass_criteria": "Hexes off removes the hex layer (basemap still non-blank); hexes back restores it; no errors."
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "mitma-sedona-ui-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless-browser UI test harness for docs/explore.html (deck.gl geo-browser, software WebGL).",
+  "scripts": {
+    "smoke": "node smoke.mjs",
+    "test": "node smoke.mjs",
+    "slice": "node run-slice.mjs",
+    "install:browser": "playwright install chromium",
+    "postinstall": "playwright install chromium || true"
+  },
+  "keywords": ["playwright", "deck.gl", "webgl", "ui-test", "geo-browser"],
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.61.0"
+  }
+}
