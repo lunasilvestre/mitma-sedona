@@ -20,11 +20,14 @@ pipeline under open-data constraints.
 
 > **▶ [Explore the interactive geo-browser →](https://lunasilvestre.github.io/mitma-sedona/explore.html)** — a
 > satellite-backed map of the liveability index: 45,220 H3 res-8 hexes over
-> keyless Esri World Imagery, with a preset selector, **15 toggleable analytic
-> metrics** (recolour consistently bright = more liveable), satellite +
-> dark/light/OSM basemaps, a hex-opacity slider, a study panel, an embedded
-> Mermaid pipeline, and MITMA OD arcs + OSM amenity inputs. Pure static
-> (deck.gl + MapLibre + h3-js, zero build step), served from GitHub Pages.
+> keyless Esri World Imagery, with a preset selector, **30+ toggleable analytic
+> metrics** (the liveability output, the deep-Spark MITMA mobility/rhythm/typology
+> layers, and every scoring input), satellite + dark/light/OSM basemaps, a
+> hex-opacity slider, a study panel, an embedded Mermaid pipeline, MITMA OD arcs
+> + OSM amenity inputs, and a **Month-window dropdown** (Pooled / winter·Feb /
+> spring·May / summer-onset·Jun 2025) that re-points the season-aware mobility
+> metrics — plus a dedicated **summer−winter weekend-pull delta** field. Pure
+> static (deck.gl + MapLibre + h3-js, zero build step), served from GitHub Pages.
 > Source: [`docs/explore.html`](docs/explore.html) +
 > [`docs/app/geobrowser-map.js`](docs/app/geobrowser-map.js).
 
@@ -42,6 +45,25 @@ pipeline under open-data constraints.
 > *relative index* (not a guarantee), and some amenity layers are sparse. Only
 > optional Valhalla bike isochrones remain. The full before/after record:
 > [`docs/v2_revision.md`](docs/v2_revision.md).
+
+> **Deep-Spark/Sedona mobility layers + a month/season dimension (additive).**
+> Beyond the published score, a real distributed Sedona pipeline now builds the
+> MITMA mobility layers (24-hour rhythm, weekend hotspots, KMeans typology,
+> geodemographics, OD arcs) at **full scale — a 390 M-row OD scan over 89 days of
+> 2025** — attributed to hexes by an **area-weighted dasymetric crosswalk**
+> (`ST_Intersection` in EPSG:25831, closure exactly 1.0000), replacing the
+> centroid join that stamped a whole distrito's flow onto every hex. The 89 days
+> split into **three calendar month-windows** (winter·Feb / spring·May /
+> summer-onset·Jun), each independently re-aggregated, exposed through the
+> geo-browser's **Month-window selector** and a **summer−winter weekend-pull
+> delta** (`weekend_hotspot_summer_minus_winter`, Jun−Feb: min −0.381 · median
+> +0.036 · max +0.589, **75% of hexes positive** — real signal). **Honesty
+> contract:** these are three calendar month-windows, a *month-window comparison,
+> not a seasonal/climate average* — one cold month is not "winter climatology",
+> and the whole thing is a relative index, a starting question, not a guarantee.
+> **The default published liveability score is unchanged** — the new mobility +
+> season columns ship at weight 0. Full method + numbers:
+> [`docs/why_spark_sedona.md`](docs/why_spark_sedona.md).
 
 ## Why this exists
 
@@ -125,22 +147,26 @@ All open, all citable. Condensed table below; full catalog + licences in
 
 **Default data window:** Q1+Q2 2024 daily MITMA + all March 2024 hourly MITMA
 (~3.5 GB bronze). `--scope dev` uses the 7-day window (2024-03-04..10) the
-shipped v2.3 run was built on.
+shipped v2.3 score was built on. The additive **deep-Spark mobility/season
+layers** use a separate **89-day 2025 window** — three calendar month-windows,
+Feb (28d) + May (31d) + Jun (30d), a 390 M-row OD scan — for the month/season
+comparison (see [`docs/why_spark_sedona.md`](docs/why_spark_sedona.md)).
 
 ## Stack & architecture
 
 | Concern | Choice | Why |
 |---|---|---|
-| Spatial joins at scale | **Apache Sedona 1.9 on Spark 4.1** | 27 M-row MITMA aggregation + H3 explode in SQL |
+| Spatial joins at scale | **Apache Sedona 1.9 on Spark 4.1** | 390 M-row MITMA OD aggregation (89 days, 2025) + dasymetric H3 crosswalk in SQL |
 | Analytical grain | **H3 res-8** (~0.7 km² hexes) | uniform, hierarchical, join-friendly |
 | Lakehouse | **Bronze → Silver → Gold** parquet, pandera contracts on write | provenance + validation |
 | Library | `src/catmob/` (schemas, io, scoring, viz) | reusable, testable, notebook-agnostic |
 | Visualisation | **deck.gl 9.3 + MapLibre GL 4.7 + h3-js**, keyless, zero build | static GitHub Pages, no backend |
 
-Sedona handles every spatial join; the gold layer at this data size actually
-runs faster as plain pandas + geopandas + h3-py (a classloader-mismatch on the
-Sedona spatial-index serde — see the retrospective), while bronze + the 27 M-row
-MITMA aggregation stay on Sedona where it pays off. Repo layout +
+Sedona handles every spatial join. The deep-Spark mobility/season layers run the
+**390 M-row MITMA OD aggregation + the dasymetric H3 crosswalk** on real Sedona
+(the crosswalk's `BroadcastIndexJoin` R-tree is now proven on this env — a
+classloader collision on the spatial-index serde was diagnosed and fixed; see
+[`docs/why_spark_sedona.md`](docs/why_spark_sedona.md)). Repo layout +
 lakehouse design: [`docs/architecture.md`](docs/architecture.md). The eight SQL
 idioms used (H3 cell-id explode, dasymetric disaggregation, `RS_ZonalStats`,
 `ST_KNN`, `BROADCAST` hints, GeoArrow zero-copy, `MAX_BY` peak-hour, `ST_DBSCAN`):

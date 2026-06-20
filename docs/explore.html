@@ -50,8 +50,11 @@
 
     <p class="scope-banner">The liveability score is a <strong>relative index</strong> —
       a starting question, not a guarantee, not a recommendation, not an operational
-      service. Distances are computed in metres (EPSG:25831); the mobility signal is a
-      7-day March-2024 window.</p>
+      service. Distances are computed in metres (EPSG:25831); the mobility signal pools
+      <strong>89 days across three 2025 calendar month-windows</strong> (Feb · May · Jun)
+      from a 390 M-row MITMA OD scan. The season layers are a
+      <strong>month-window comparison, not a seasonal/climate average</strong> —
+      one cold month is not "winter climatology".</p>
 
     <!-- ===== Layers ===== -->
     <section id="layers-section">
@@ -209,11 +212,17 @@
           <strong>89 days across three 2025 calendar month-windows</strong> — Feb (28d),
           May (31d), Jun (30d). The Month-window dropdown splits the season-aware metrics
           into those three windows (winter · Feb / spring · May / summer-onset · Jun) so you
-          can read where weekend pull switches on as the coast warms. These are
-          <strong>three calendar month-windows, NOT a seasonal or climate average</strong>:
-          Feb is one cold month, Jun is summer-<em>onset</em> (the coastal weekend uplift is
-          still building), and the contrast is a relative index — the starting question
-          "where does weekend pull switch ON, Feb vs Jun?" — not a year-round verdict.</li>
+          can read where weekend pull switches on as the coast warms. This is a
+          <strong>month-window comparison, not a seasonal/climate average</strong>:
+          one cold month is not "winter climatology", Jun is summer-<em>onset</em> (the
+          coastal weekend uplift is still building), and the contrast is a relative index —
+          the starting question "where does weekend pull switch ON, Feb vs Jun?" — not a
+          year-round verdict. The summer−winter delta layer
+          (<code>weekend_hotspot_summer_minus_winter</code>, Jun−Feb) is the same metric
+          differenced per hex: warm = a hex that switches ON as a weekend hotspot in
+          summer-onset, ~0 = no shift, cool = relatively more weekend-busy in winter
+          (diverging palette, pivot 0). Across the grid it runs min −0.381 · median +0.036 ·
+          max +0.589, with <strong>75% of hexes positive</strong> — real signal, not noise.</li>
         <li><strong>Sparse amenity layers.</strong> Some proximity layers cover only part
           of the grid — climbing ~49%, hospitals ~31%, yoga ~15%, coast ~6%. Cells with
           no amenity in the 10 km catchment simply earn no closeness reward there (and a

@@ -1,13 +1,23 @@
 # Why Spark + Apache Sedona earns its keep
 
 > Status: the **MITMA deep-Spark mobility layers** (rhythm, weekend hotspots,
-> typology, geodemographics, OD arcs) are produced by a **real distributed
-> Sedona pipeline** — the canonical `src/catmob/pipeline_{silver,gold}.py`
-> path, driven through one reusable session (`src/catmob/spark.py:get_sedona`)
-> — not by pandas. This note records the operations where Sedona/Spark is
-> load-bearing, **reads its numbers straight from the shipped gold**
-> (`data/gold/mitma_features/zoning=distritos/` — 46,121 hexes × 35 columns),
-> and states the R-tree / `BroadcastIndexJoin` status honestly.
+> typology, geodemographics, OD arcs, **and a month/season dimension**) are
+> produced by a **real distributed Sedona pipeline** — the canonical
+> `src/catmob/pipeline_{silver,gold}.py` path, driven through one reusable
+> session (`src/catmob/spark.py:get_sedona`) — not by pandas. They are now built
+> at **full scale**: a **390,238,741-row** MITMA OD scan over **89 days of 2025**
+> (Feb 28d + May 31d + Jun 30d), partition-pruned by `zoning × fecha`. This note
+> records the operations where Sedona/Spark is load-bearing, **reads its numbers
+> straight from the shipped gold**
+> (`data/gold/mitma_features/zoning=distritos/h3_mitma_features.parquet` —
+> 46,121 hexes × 37 columns, plus `seasonal_long.parquet` with 27 per-month-window
+> columns), and states the R-tree / `BroadcastIndexJoin` status honestly.
+>
+> **Month-window honesty contract.** The season layers compare **three calendar
+> month-windows** (Feb / May / Jun 2025) — a **month-window comparison, not a
+> seasonal/climate average**. One cold month is not "winter climatology". Like
+> every layer here they are a **relative index / a starting question, not a
+> guarantee**.
 
 ## What is actually load-bearing (and what is NOT)
 
@@ -37,22 +47,28 @@ crosswalk, then a distributed window/cube aggregation over GB-scale OD.**
 The shipped v2 gold attributed mobility flow to hexes with a **naive centroid
 `gpd.sjoin(predicate="within")` join** (`scripts/run_gold_v2.py`): every hex
 whose centroid fell inside a distrito received that **whole distrito's** flow —
-a step function, not a field.
+a step function, not a field. This is the **load-bearing Sedona correctness
+fix**: the dasymetric crosswalk is the one operation that genuinely needs the
+spatial engine, and it is what moves the published per-hex numbers most.
 
-The canonical pipeline replaces this with an **area-weighted dasymetric
-crosswalk** computed in Sedona, giving a genuinely continuous per-hex field.
-Numbers read from the shipped gold:
+The canonical pipeline replaces the centroid join with an **area-weighted
+dasymetric crosswalk** computed in Sedona, giving a genuinely continuous per-hex
+field. Numbers read from the shipped gold
+(`h3_mitma_features.parquet`, 46,121 hexes):
 
 | metric | old (centroid) | new (dasymetric, shipped) |
 | --- | --- | --- |
-| `mitma_inflow_daily` median | 86,645 | **40.27** |
-| distinct inflow values | 569 | **46,121** (one per hex) |
+| `mitma_inflow_daily` median | 86,645 | **42** |
+| distinct inflow values | ≈ 584 (one per distrito) | **46,121** (one per hex) |
 
 The old median (86,645) was a *whole-distrito total* stamped onto every hex; the
-new median (40.27) is a genuine *per-hex share*. This is a **correctness fix**,
-not a regression — flagged here and in the PR because the published numbers move.
-(The default published liveability score is byte-identical: the new mitma terms
-ship at weight 0.)
+new median (~42 trips/day) is a genuine *per-hex share*. The centroid join
+collapsed the grid onto ~584 distinct distrito totals; the dasymetric crosswalk
+resolves **all 46,121 hexes** to their own area-weighted value — two-plus orders
+of magnitude finer, and a step function turned into a field. This is a
+**correctness fix**, not a regression — flagged here and in the PR because the
+published mobility numbers move. (The default published liveability score is
+byte-identical: the new mitma + season terms ship at weight 0.)
 
 ## The load-bearing Sedona/Spark operations
 
@@ -96,17 +112,18 @@ ship at weight 0.)
    `k=5` (`pipeline_gold.py`). KMeans is what ships because BisectingKMeans on
    this scaled vector intermittently collapsed to a single cluster. `sink_source`
    = `log(outflow/inflow)` is deliberately *not* a cluster axis — on this
-   daily-distrito sample it spans only ≈ −0.075…0.033, too narrow to support an
+   daily-distrito window it spans only ≈ −0.063…0.028, too narrow to support an
    `employment-sink`/`commuter-dormitory` split — so it is carried as a
    descriptive column only. Labels are assigned from the **actual cluster
    centroids** (strongest |z|-score pole, `|z| ≥ 0.5` gate, else `mixed-balanced`).
    The shipped gold's 5 KMeans clusters resolve to **4 distinct, data-driven
-   typologies**: `mixed-balanced` (21,846 hexes; two centroids land near the
-   origin), `transit-corridor` (11,410; `long_trip` z ≈ +1.14), `commuter-corridor`
-   (9,406; `commute` z ≈ +1.34), `self-contained` (3,459; `intra_zone` z ≈ +2.03).
-   `leisure-magnet` is a legitimately *unassigned* pole — no cluster has leisure
-   as its strongest axis — which is the honest, non-fabricated outcome, not a
-   missing label.
+   typologies** (counts read from `h3_mitma_features.parquet`, all 46,121 hexes):
+   `mixed-balanced` (18,433 hexes; two centroids land near the origin),
+   `transit-corridor` (12,221; `long_trip` z ≈ +0.57), `commuter-corridor`
+   (7,754; `commute` z ≈ +1.48), `self-contained` (7,713; `intra_zone` z ≈ +1.28,
+   also its leisure/long-trip pole). `leisure-magnet` is a legitimately
+   *unassigned* pole — no cluster has leisure as its strongest axis — which is the
+   honest, non-fabricated outcome, not a missing label.
 
 6. **`ST_Transform` to EPSG:25831 metric reprojection** — every area weight
    depends on it; doing the area math in a geographic CRS, or assuming 25831 on
@@ -162,12 +179,15 @@ the parquet conflict at once.
 Earlier drafts oversold this as "TBs / tens of billions of rows". The corrected
 reality:
 
-- **The working set is GB-scale, not TB.** We read only OD that **touches
-  Catalonia** (`origen` *or* `destino` in Catalonia) over a **representative time
-  window**, partition-pruned by `zoning × fecha`. The shipped 7-day March-2024
-  distritos sample is **27.7 M hourly OD rows** (`od_silver/zoning=distritos`,
-  fechas 2024-03-04…10) — hundreds of millions of rows / GB at a full window, not
-  the full all-Spain multi-year dump.
+- **The working set is GB-scale, not TB — and now full-scale.** We read only OD
+  that **touches Catalonia** (`origen` *or* `destino` in Catalonia) over a
+  **representative time window**, partition-pruned by `zoning × fecha`. The shipped
+  run scans **390,238,741 silver OD rows** (`od_silver/zoning=distritos`) across
+  **89 days of 2025** — three calendar month-windows, **Feb (28 days,
+  20250201…0228) + May (31, 20250501…0531) + Jun (30, 20250601…0630)** — hundreds
+  of millions of rows, GB-scale, *not* the full all-Spain multi-year dump. This is
+  what makes the month/season dimension below possible: each window is a fully
+  independent re-aggregation of its own ~130 M-row slice.
 - **"OOM" is a single-JVM `local[*]` artifact**, not a property of the data. It
   comes from trying to materialise everything in one JVM; the filtered + windowed
   working set runs fine on **atlas with sized executors**. The pandas shortcut
@@ -179,9 +199,10 @@ reality:
 
 These are **relative indices and starting questions, not ground truth.**
 `weekend_hotspot_score`, `mobility_typology`, `geodemo_diversity` and the rhythm
-shares are *interpretable signals* over a 7-day sample — they tell you *where to
-look* (which hexes are self-contained, leisure magnets or transit corridors;
-where weekend rhythm diverges from weekday), not a calibrated measurement.
+shares are *interpretable signals* over an 89-day 2025 window — they tell you
+*where to look* (which hexes are self-contained, leisure magnets or transit
+corridors; where weekend rhythm diverges from weekday), not a calibrated
+measurement.
 Min-rows gates (`support_n` = the area-weighted **OD-segment row count**, a
 coarse density/confidence proxy) and NA-as-its-own-segment handling keep the
 indices honest; cross-zoning ratios are invalid (different expansion bases) and
@@ -196,6 +217,49 @@ geodemographic shares (`female_share`, `youth/senior_mobility_share`,
 variable (NA excluded from the denominator) and ship `*_of_all_trips` companions
 plus `*_coverage` NA-fractions so the unlabelled mass is explicit.
 `geodemo_diversity` is Shannon entropy in **bits** (log base 2).
+
+## The month/season dimension (and its honest limits)
+
+The full-scale 89-day window is split into **three calendar month-windows** —
+**winter · Feb 2025**, **spring · May 2025**, **summer-onset · Jun 2025** — and the
+season-sensitive mobility metrics (weekend/weekday ratio, weekend-hotspot score,
+leisure/commute shares, the four rhythm shares, peak-hour bucket) are
+**re-aggregated independently per window** over its own ~130 M-row OD slice. Each
+window goes through the *same* dasymetric crosswalk and the *same* exact closure,
+so the per-window numbers are directly comparable per hex. The result ships as
+`seasonal_long.parquet` (**27 per-month-window columns**, one set of metrics per
+hex per window) and, for the browser, the lazy `seasons.json` sidecar
+(per-(hex, month-window) weekend + rhythm metrics, loaded only when the
+Month-window dropdown is touched).
+
+**The headline is a real, differenced signal.** The inline
+`weekend_hotspot_summer_minus_winter` column is **Jun − Feb** of the
+weekend-hotspot score, per hex. Read straight from the shipped gold (n = 41,556
+hexes that clear the support gate in **both** windows):
+
+| `weekend_hotspot_summer_minus_winter` | value |
+| --- | --- |
+| min | **−0.381** |
+| median | **+0.036** |
+| max | **+0.589** |
+| share of hexes positive | **75.4 %** |
+
+Three-quarters of qualifying hexes get *more* weekend-peaked from winter to
+summer-onset — strongest on the coast, trail-heads and second-home zones — which
+is exactly the field you'd expect a real summer pull to print, not noise centred
+on zero. The companion `weekend_ratio_summer_minus_winter` (the same Jun − Feb on
+the raw weekend/weekday ratio) is tighter (median +0.005, 58.1 % positive),
+appropriately so. In the geo-browser this delta is its **own diverging `RdBu`
+field (pivot 0)**: warm = switches ON in summer-onset, cool = relatively more
+weekend-busy in winter, grey = failed the support gate in one window (never a
+fake zero).
+
+**The honesty contract (verbatim, also in the captions).** These are **three
+calendar month-windows (Feb / May / Jun 2025)**, a **month-window comparison, not
+a seasonal/climate average**; **one cold month is not "winter climatology"**. Jun
+is summer-*onset* — the coastal weekend uplift is still building, not a July/August
+peak. Like every layer here, the season metrics are a **relative index / a
+starting question, not a guarantee.**
 
 ## Full-scale staging (atlas)
 
@@ -219,7 +283,14 @@ plus `*_coverage` NA-fractions so the unlabelled mass is explicit.
 ## Keyless / static contract preserved
 
 Every new layer ships as additional JSON under `docs/story_data/`: new scalar
-columns merged into `hexes.json`, the heavy 24-float profiles in a lazy
-`rhythm.json` sibling (a hover sparkline, keeping `hexes.json` from bloating with
-arrays), and the Sedona-built `arcs.json` (250 arcs). No API keys, no build
-step — the deck.gl geo-browser reads them statically, exactly as before.
+columns merged into `hexes.json` (now 45,220 hexes, including the inline
+`weekend_hotspot_summer_minus_winter` and `weekend_ratio_summer_minus_winter`
+deltas), the heavy 24-float profiles in a lazy `rhythm.json` sibling (a hover
+sparkline, keeping `hexes.json` from bloating with arrays), the per-month-window
+metrics in a lazy `seasons.json` sidecar (loaded only when the Month-window
+dropdown is used), and the Sedona-built `arcs.json` (250 arcs). The
+`manifest.json` carries a `seasonal` block (windows, pooled label, metric +
+short-key map, the delta/ratio-delta columns, the `seasons.json` sidecar pointer,
+and the "three calendar month-windows, NOT a climate/seasonal average" note). No
+API keys, no build step — the deck.gl geo-browser reads them statically, exactly
+as before.
