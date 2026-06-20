@@ -55,6 +55,19 @@ SOURCES = {
     },
 }
 
+# Silver lakehouse — the dated od_silver partitions whose fecha=YYYYMMDD dirs are
+# the ground-truth provenance of the analytic window. The gold features parquet is
+# aggregated and carries NO fecha column, so the manifest window is DERIVED from
+# these partition dirs (min/max fecha + distinct day count) rather than hardcoded,
+# so it can't drift away from the data actually shipped. Defined as scripts/
+# run_full_scale.sh's canonical window: 2025-02 + 2025-05 + 2025-06 = 89 days,
+# fecha 20250201..20250630.
+SILVER_OD = REPO / "data" / "silver" / "od_silver"
+
+# Fallback window if the silver partitions aren't on disk (e.g. exporting from a
+# gold-only checkout). Matches scripts/run_full_scale.sh FECHA_START/FECHA_END.
+FALLBACK_WINDOW = "89 days, 2025 (2025-02 + 2025-05 + 2025-06; 20250201..20250630)"
+
 # The new scalar mobility columns merged into hexes.json (alongside v2 columns).
 # Recomputed dasymetric flow columns OVERWRITE the naive-centroid v2 values.
 MOBILITY_SCALAR_COLS = [
@@ -137,6 +150,58 @@ def _round_mobility(df: pd.DataFrame) -> None:
               "sexo_coverage", "edad_coverage", "renta_coverage"):
         if c in df:
             df[c] = df[c].round(3)
+
+
+def _derive_window(zoning: str = "distritos") -> str:
+    """Derive the mobility window string from the silver od_silver partition dirs.
+
+    The gold features parquet is aggregated and has no fecha column, so provenance
+    is read from the dated silver partitions (data/silver/od_silver/zoning=<z>/
+    fecha=YYYYMMDD). Returns a string built from the actual min/max fecha, distinct
+    day count and contributing month set — self-correcting, so it can never drift
+    from the data on disk. Falls back to FALLBACK_WINDOW if silver is absent.
+    """
+    part_root = SILVER_OD / f"zoning={zoning}"
+    if not part_root.exists():
+        return FALLBACK_WINDOW
+    fechas = sorted(
+        p.name.split("=", 1)[1]
+        for p in part_root.iterdir()
+        if p.is_dir() and p.name.startswith("fecha=") and p.name.split("=", 1)[1].isdigit()
+    )
+    if not fechas:
+        return FALLBACK_WINDOW
+    lo, hi = fechas[0], fechas[-1]
+    n_days = len(fechas)
+    # Contributing YYYY-MM months in order, e.g. "2025-02 + 2025-05 + 2025-06".
+    months = sorted({f"{f[:4]}-{f[4:6]}" for f in fechas})
+    months_str = " + ".join(months)
+    return f"{n_days} days, {months_str} ({lo}..{hi}), {zoning} zoning"
+
+
+# Integer-valued distance/reach columns inherited from the v2 hexes.json. Reading
+# the JSON into a DataFrame promotes them to float64 (they carry nulls), which
+# serialises as "9439.0" — a cosmetic repr drift vs the v2 baseline that wrote
+# bare ints "9439". Re-pin them to nullable Int64 so the JSON keeps integer repr
+# (null where missing). Values are unchanged; this only fixes the textual repr.
+INT_DISTANCE_COLS = [
+    "climb_min_m", "eprtr_facility_min_m", "hospital_min_m",
+    "sea_min_m", "train_reach_min", "yoga_min_m",
+]
+
+
+def _pin_int_distance_cols(df: pd.DataFrame) -> None:
+    """Re-pin integer-valued distance cols to nullable Int64 (integer JSON repr).
+
+    Only pins a column when every non-null value is integral, so we never silently
+    truncate a genuinely fractional value.
+    """
+    for c in INT_DISTANCE_COLS:
+        if c not in df.columns:
+            continue
+        nonnull = df[c].dropna()
+        if nonnull.empty or ((nonnull % 1) == 0).all():
+            df[c] = df[c].round().astype("Int64")
 
 
 def _resolve_source() -> tuple[str, dict]:
@@ -234,6 +299,7 @@ def main() -> None:
     if drop_cols:
         hx_df = hx_df.drop(columns=drop_cols)
     merged = hx_df.merge(mob, on="h3_id", how="left")
+    _pin_int_distance_cols(merged)
     _dump(hexes_path, _records_nan_safe(merged))
     print(f"OK hexes.json: {len(merged):,} hexes, +{len(mob.columns) - 1} mobility cols")
 
@@ -280,7 +346,11 @@ def main() -> None:
     manifest["typology_present"] = present
     manifest["arc_count"] = len(arcs)
     manifest["mobility_source"] = src_name
-    manifest["mobility_window"] = "7 days, March 2024 (2024-03-04..10), distritos zoning"
+    # DERIVED from the silver od_silver fecha partitions (NOT hardcoded) so the
+    # published window can never drift from the data actually shipped. Currently
+    # the full-scale 2025 window: 89 days, 2025-02 + 2025-05 + 2025-06,
+    # fecha 20250201..20250630, distritos zoning.
+    manifest["mobility_window"] = _derive_window("distritos")
     manifest["mobility_method"] = "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
     manifest["version"] = "v3-mobility"
 
