@@ -95,6 +95,10 @@ flowchart TD
     GOLD -->|"catmob.scoring.score_hex<br>(configs/weights.yaml, 4 presets)"| SCORE["liveability_score<br>per hex × preset"]
     SCORE --> BROWSER["Geo-browser<br>(docs/explore.html)"]
     SCORE --> DECK["Standalone deck.gl page<br>(catalonia_liveability.html)"]
+
+    SILVER -->|"dasymetric zone→H3 crosswalk<br>(ST_Intersection, EPSG:25831, closure 1.0000)"| XWALK["zone_h3_xwalk<br>584 zones · 58,656 rows"]
+    XWALK -->|"broadcast equi-join + window/cube agg<br>(390 M OD rows · 89 days 2025)"| MOBGOLD["Deep-Spark mobility gold<br>mitma_features 46,121 × 37<br>+ seasonal_long (3 month-windows)"]
+    MOBGOLD -.->|"additive layers, weight 0<br>(score unchanged)"| BROWSER
 ```
 
 Bronze → Silver → Gold lakehouse, H3 res-8 as the analytical grain, Sedona for
@@ -217,8 +221,9 @@ mitma-sedona/
     ├── app/geobrowser-map.js       # geo-browser logic (+ explore.css)
     ├── catalonia_liveability.html  # classic self-contained deck.gl page (superseded)
     ├── preview_deck.html           # synthetic-data preview, no backend
-    ├── story_data/                 # geo-browser data bundle (hexes/arcs/pois/manifest)
-    └── *.md                        # the six deeper reference docs (see below)
+    ├── story_data/                 # geo-browser data bundle (hexes/arcs/pois/manifest
+    │                               #   + lazy rhythm.json sparklines + seasons.json sidecar)
+    └── *.md                        # the deeper reference docs (see below)
 ```
 
 ## Quickstart & tests
@@ -258,6 +263,7 @@ record with effort/impact estimates: [`docs/v2_revision.md`](docs/v2_revision.md
 |---|---|
 | [docs/quickstart.md](docs/quickstart.md) | Run it in 5 min (tests + preview) or 10 min (full Docker stack) |
 | [docs/architecture.md](docs/architecture.md) | Repo layout + Bronze→Silver→Gold lakehouse + Sedona SQL idioms |
+| [docs/why_spark_sedona.md](docs/why_spark_sedona.md) | Where Spark/Sedona earns its keep: the 390 M-row deep-Spark run, dasymetric crosswalk, R-tree status, and the month/season dimension |
 | [docs/scoring.md](docs/scoring.md) | The liveability score: 6 dimensions, weights, and the four presets |
 | [docs/data_sources.md](docs/data_sources.md) | Every upstream source + licence + the default data window |
 | [docs/visualization.md](docs/visualization.md) | The deck.gl / Lonboard stack and the explore.html geo-browser |

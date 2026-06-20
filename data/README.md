@@ -25,8 +25,11 @@ data/
 │   ├── osm_network/...
 │   ├── train_stations/...
 │   └── isochrones/...
-└── gold/              analysis-ready hex grid (~50k rows)
-    └── h3_res8_catalonia.parquet
+└── gold/              analysis-ready hex grid
+    ├── h3_res8_catalonia_v2.parquet              (score grid: 45,220 hexes × 26 cols)
+    └── mitma_features/zoning=distritos/          (deep-Spark mobility, additive, weight 0)
+        ├── h3_mitma_features.parquet             (46,121 hexes × 37 cols)
+        └── seasonal_long.parquet                 (3 month-windows: Feb/May/Jun 2025)
 ```
 
 ## Catalog
@@ -114,7 +117,7 @@ and to the repo README.
 | Bronze biodiversity (WDPA + iNat sample + tree cover) | ~400 MB |
 | Bronze pollution (E-PRTR + VIIRS sample) | ~150 MB |
 | Silver (Sedona joins, partitioned) | ~500 MB |
-| Gold (`h3_res8_catalonia.parquet`) | ~25 MB |
+| Gold (`h3_res8_catalonia_v2.parquet`) | ~4 MB |
 | **Total** | **~2.1 GB** |
 
 Atlas has 738 GB free on `/home/nls/Documents/dev`; no constraint.
