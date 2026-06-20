@@ -15,7 +15,7 @@ git clone git@github.com:lunasilvestre/mitma-sedona.git
 cd mitma-sedona
 python3 -m venv .venv && source .venv/bin/activate
 pip install 'pandera[pandas]>=0.20' pytest pandas
-PYTHONPATH=src pytest -q   # → 44 passed in 0.23s
+PYTHONPATH=src pytest -q   # → 47 passed
 xdg-open docs/preview_deck.html  # standalone deck.gl preview
 ```
 
@@ -52,11 +52,11 @@ slice, not the full year.
 ## Tests
 
 ```bash
-PYTHONPATH=src pytest -q       # → 44 passed in 0.23s
+PYTHONPATH=src pytest -q       # → 47 passed
 PYTHONPATH=src pytest -v       # full output
 ```
 
-44 contract tests covering schema enforcement, MITMA CSV.gz parsing
+47 contract tests covering schema enforcement, MITMA CSV.gz parsing
 (gzip + UTF-8 + semicolon + zone-ID padding), OSM POI categorisation,
 XVPCA air-quality parsing, geo invariants, and URL builders. CI runs
 them on every push.

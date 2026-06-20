@@ -15,7 +15,7 @@ mitma-sedona/
 │   └── sedona_sql_patterns.md     8 advanced SQL patterns from Wherobots/Apache
 ├── src/catmob/                    reusable library (schemas, io, scoring, viz)
 ├── notebooks/                     01_ingest → 02_liveability → 03_viz + 04_descriptives
-├── tests/                         44 contract tests (pytest -q)
+├── tests/                         47 contract tests (pytest -q)
 ├── data/README.md                 dataset catalog (every source linked)
 ├── docker/                        Sedona + Valhalla + Jupyter compose stack
 ├── configs/weights.yaml           liveability scoring weight presets

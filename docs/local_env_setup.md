@@ -103,7 +103,7 @@ If a Sedona 1.9 incompatibility surfaces, downgrade with
 
 ```bash
 mamba activate sedona
-pytest                 # expect: 44 passed in ~0.4 s
+pytest                 # expect: 47 passed
 ```
 
 For a quick Spark/Sedona smoke test (M6 entry point):

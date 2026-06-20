@@ -1,6 +1,6 @@
 # mitma-sedona
 
-[![tests](https://img.shields.io/badge/tests-44%20passing-green.svg)](docs/quickstart.md#tests)
+[![tests](https://img.shields.io/badge/tests-47%20passing-green.svg)](docs/quickstart.md#tests)
 [![python](https://img.shields.io/badge/python-3.11+-blue.svg)](#)
 [![sedona](https://img.shields.io/badge/sedona-1.9+-orange.svg)](#)
 [![spark](https://img.shields.io/badge/spark-4.1-orange.svg)](#)
@@ -207,7 +207,7 @@ mitma-sedona/
 │   ├── scoring.py                  # score_hex + score_dataframe
 │   └── viz.py                      # deck.gl HTML export
 ├── notebooks/                      # 01_ingest → 02_liveability → 03_viz + 04_descriptives
-├── tests/                          # 44 contract tests (pytest -q)
+├── tests/                          # 47 contract tests (pytest -q)
 ├── data/                           # bronze / silver / gold (+ data/README.md catalog)
 ├── docker/                         # Sedona + Valhalla + Jupyter compose stack
 ├── scripts/run_gold_v2.py          # builds the v2 gold layer (reproj fix + full enrichment)
@@ -230,13 +230,13 @@ recipe: [`docs/quickstart.md`](docs/quickstart.md).
 git clone git@github.com:lunasilvestre/mitma-sedona.git && cd mitma-sedona
 python3 -m venv .venv && source .venv/bin/activate
 pip install 'pandera[pandas]>=0.20' pytest pandas
-PYTHONPATH=src pytest -q            # → 44 passed in ~0.2s
+PYTHONPATH=src pytest -q            # → 47 passed
 xdg-open docs/preview_deck.html     # standalone deck.gl preview (no backend)
 ```
 
 For the real Sedona/Spark pipeline:
 `docker compose -f docker/docker-compose.yml up -d` (JupyterLab on :8888,
-Valhalla on :8002). The 44 contract tests cover schema enforcement, MITMA
+Valhalla on :8002). The 47 contract tests cover schema enforcement, MITMA
 CSV.gz parsing, OSM POI categorisation, XVPCA air-quality parsing, geo
 invariants, and URL builders — CI runs them on every push.
 
