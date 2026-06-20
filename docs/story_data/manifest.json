@@ -50,7 +50,9 @@
     "low_income_of_all_trips": 1.0,
     "sexo_coverage": 1.0,
     "edad_coverage": 1.0,
-    "renta_coverage": 1.0
+    "renta_coverage": 1.0,
+    "weekend_hotspot_summer_minus_winter": 0.9098,
+    "weekend_ratio_summer_minus_winter": 1.0
   },
   "score_stats": {
     "default": {
@@ -147,6 +149,18 @@
       "50%": 0.128,
       "max": 0.234,
       "mean": 0.129
+    },
+    "weekend_hotspot_summer_minus_winter": {
+      "min": -0.381,
+      "50%": 0.035,
+      "max": 0.589,
+      "mean": 0.039
+    },
+    "weekend_ratio_summer_minus_winter": {
+      "min": -0.28,
+      "50%": 0.005,
+      "max": 0.377,
+      "mean": -0.001
     }
   },
   "typology_counts": {
@@ -170,5 +184,57 @@
   ],
   "mobility_source": "dev1",
   "mobility_window": "89 days, 2025-02 + 2025-05 + 2025-06 (20250201..20250630), distritos zoning",
-  "mobility_method": "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)"
+  "mobility_method": "dasymetric zone->H3 crosswalk (Sedona ST_Intersection, EPSG:25831)",
+  "seasonal": {
+    "windows": [
+      {
+        "key": "feb",
+        "label": "winter \u00b7 Feb 2025",
+        "days": 28
+      },
+      {
+        "key": "may",
+        "label": "spring \u00b7 May 2025",
+        "days": 31
+      },
+      {
+        "key": "jun",
+        "label": "summer-onset \u00b7 Jun 2025",
+        "days": 30
+      }
+    ],
+    "pooled_label": "Pooled (all 89 days)",
+    "metrics": [
+      "weekend_weekday_ratio",
+      "weekend_hotspot_score",
+      "leisure_share",
+      "commute_share",
+      "am_peak_share",
+      "pm_peak_share",
+      "midday_share",
+      "night_share",
+      "peak_hour_bucket"
+    ],
+    "short_keys": {
+      "weekend_weekday_ratio": "wwr",
+      "weekend_hotspot_score": "whs",
+      "leisure_share": "leis",
+      "commute_share": "comm",
+      "am_peak_share": "am",
+      "pm_peak_share": "pm",
+      "midday_share": "mid",
+      "night_share": "night",
+      "peak_hour_bucket": "peak"
+    },
+    "delta": {
+      "column": "weekend_hotspot_summer_minus_winter",
+      "label": "Weekend pull: summer-onset \u2212 winter (Jun\u2212Feb)"
+    },
+    "ratio_delta": {
+      "column": "weekend_ratio_summer_minus_winter",
+      "label": "Weekend \u00f7 weekday ratio: summer-onset \u2212 winter (Jun\u2212Feb)"
+    },
+    "sidecar": "seasons.json",
+    "note": "three calendar month-windows, NOT a climate/seasonal average"
+  }
 }
