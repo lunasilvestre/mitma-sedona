@@ -9,6 +9,13 @@ plus the retrospective on what tripped us and how we fixed it.
 > of March 2024 OD flows), and the liveability score is a *relative index*, not
 > a guarantee. Coverage is full for the raster/zonal layers but still sparse on
 > some point/station layers — see the retrospective for the caveats.
+>
+> **Scope of this page.** Everything below is the **published liveability score**
+> (45,220-hex v2 gold, 7-day-2024 mobility input). The additive **deep-Spark
+> MITMA mobility + month/season layers** (a 390 M-row, 89-day-2025 Sedona run —
+> rhythm, weekend hotspots, KMeans typology, geodemographics, the summer−winter
+> delta) ship at **weight 0**, so they change none of these score numbers; their
+> method and figures live in [why_spark_sedona.md](why_spark_sedona.md).
 
 ## Prototype artifacts
 
@@ -21,8 +28,8 @@ geo-browser produced:
 | `data/bronze/osm/pois.parquet` | 4,935 POIs | climbing 219 · yoga 67 · hospital 36 · pharmacy 411 · industry · park/clinic/doctors |
 | `data/bronze/osm/network.parquet` | 364,530 highway ways | from pyrosm — Sedona's native PBF reader doesn't yet build way geometries |
 | `data/bronze/osm/stations.parquet` | 475 stations / halts | OSM `railway=station\|halt`, GTFS fallback |
-| **`data/gold/h3_res8_catalonia_v2.parquet`** | **45,220 hexes × ~28 features** | 3.8 MB on disk; all 6 dimensions real-data-wired |
-| `docs/explore.html` | geo-browser | 15 toggleable metrics, satellite/dark/light/OSM basemaps, hex-opacity slider |
+| **`data/gold/h3_res8_catalonia_v2.parquet`** | **45,220 hexes × 26 columns** | 3.8 MB on disk; all 6 dimensions real-data-wired |
+| `docs/explore.html` | geo-browser | 30+ toggleable metrics + Month-window dropdown, satellite/dark/light/OSM basemaps, hex-opacity slider |
 
 ## Top hexes by liveability score (default weights)
 
@@ -96,9 +103,10 @@ coastline within 5 km). NULL is treated as neutral, never as a penalty.
 
 For the interactive results, see the geo-browser at
 [explore.html](explore.html) (described in [visualization.md](visualization.md))
-— 15 toggleable analytic metrics over satellite/dark/light/OSM basemaps, with a
-hex-opacity slider and study panel. Metric recolour is consistent: brighter =
-more liveable.
+— 30+ toggleable analytic metrics (every scoring input plus the additive
+deep-Spark MITMA mobility/rhythm/typology/season layers and a Month-window
+dropdown) over satellite/dark/light/OSM basemaps, with a hex-opacity slider and
+study panel. Metric recolour is consistent: brighter = more liveable.
 
 ## What I learned (retrospective)
 

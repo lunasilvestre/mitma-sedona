@@ -18,13 +18,21 @@ does not embed source code).
   hexes on top, and a **hex-opacity slider** to fade the grid against the map.
 - **Layers + controls:** the liveability output (default colouring), a **preset**
   selector (default / nature_first / quiet_strict / amenity_first) and a
-  **metric** selector that recolours the hexes by any of **15 analytic
-  dimensions** — MITMA inflow and through-ratio (diverging RdBu), train reach
-  and trains-to-BCN, climbing reach, tree cover, Natura 2000, biodiversity
-  density, NO₂, PM2.5, UHI delta, VIIRS night-light, E-PRTR proximity, industry
-  density and motorway proximity. Recolouring is consistent: **bright = more
-  liveable** across every metric. A **2.5D extrude** toggle and input layers for
-  MITMA OD arcs and OSM amenities round out the controls.
+  **metric** selector that recolours the hexes by any of **30+ analytic
+  dimensions** — every scoring input (train reach, trains-to-BCN, climbing reach,
+  tree cover, Natura 2000, biodiversity density, NO₂, PM2.5, UHI delta, VIIRS
+  night-light, E-PRTR proximity, industry density, motorway proximity) **plus the
+  deep-Spark MITMA mobility layers** built by the Sedona dasymetric crosswalk:
+  inflow/outflow/through-ratio (diverging RdBu), the four rhythm shares
+  (am-peak / midday / pm-peak / night) with a hover sparkline, weekend-hotspot
+  score, weekend/weekday ratio, KMeans `mobility_typology`, and the
+  geodemographic shares + `geodemo_diversity`. A **Month-window dropdown** (Pooled
+  / winter·Feb / spring·May / summer-onset·Jun 2025) re-points the
+  season-sensitive mobility metrics, and a dedicated **summer−winter weekend-pull
+  delta** field (`weekend_hotspot_summer_minus_winter`, Jun−Feb) renders on its
+  own diverging RdBu scale pivoted at 0. Recolouring is consistent: **bright =
+  more liveable** across every score metric. A **2.5D extrude** toggle and input
+  layers for MITMA OD arcs and OSM amenities round out the controls.
 - **Honest by design:** liveability is stated as a *relative index, a starting
   question, not a guarantee* — and sparse coverage is shown as a distinct
   slate-grey "none within reach" state, never as 0. The left study panel carries
