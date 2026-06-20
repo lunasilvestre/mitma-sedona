@@ -228,6 +228,16 @@
       kind: 'diverging', goodWhen: 'neutral', pivot: 0.0, unit: '',
       lowLabel: 'more winter draw', highLabel: 'more summer draw'
     },
+    // SECOND headline delta — the weekend÷weekday RATIO differenced the same way
+    // (Jun−Feb), its own RdBu diverging field (pivot 0). Tighter range than the
+    // hotspot delta (min −0.280 · median +0.005 · max +0.377). Inline in
+    // hexes.json, so it needs no sidecar — independent of the Season dropdown.
+    weekend_ratio_summer_minus_winter: {
+      column: 'weekend_ratio_summer_minus_winter', ramp: 'RdBu',
+      label: 'Weekend ratio: summer-onset − winter (Jun−Feb)',
+      kind: 'diverging', goodWhen: 'neutral', pivot: 0.0, unit: '×',
+      lowLabel: 'more winter draw', highLabel: 'more summer draw'
+    },
     leisure_share: {
       column: 'leisure_share', ramp: 'viridis', label: 'Leisure-activity trip share',
       kind: 'sequential', goodWhen: 'neutral', unit: '', lowLabel: 'errand', highLabel: 'leisure',

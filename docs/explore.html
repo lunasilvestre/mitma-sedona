@@ -50,11 +50,15 @@
 
     <p class="scope-banner">The liveability score is a <strong>relative index</strong> —
       a starting question, not a guarantee, not a recommendation, not an operational
-      service. Distances are computed in metres (EPSG:25831); the mobility signal pools
-      <strong>89 days across three 2025 calendar month-windows</strong> (Feb · May · Jun)
-      from a 390 M-row MITMA OD scan. The season layers are a
-      <strong>month-window comparison, not a seasonal/climate average</strong> —
-      one cold month is not "winter climatology".</p>
+      service. Distances are computed in metres (EPSG:25831). Two mobility windows live on
+      this map, and they are kept separate on purpose: the <strong>score's</strong> mobility
+      input is unchanged — the original <strong>7-day March-2024</strong> window — while the
+      additive deep-Spark mobility &amp; season <strong>display layers</strong> (rhythm,
+      weekend hotspots, typology, geodemographics, the two month-window deltas) come from the
+      full-scale <strong>89-day 2025</strong> run (Feb · May · Jun, a 390 M-row MITMA OD scan)
+      and ride at <strong>weight 0</strong> — browseable, but they do not move the score. Those
+      season layers are a <strong>month-window comparison, not a seasonal/climate
+      average</strong> — one cold month is not "winter climatology".</p>
 
     <!-- ===== Layers ===== -->
     <section id="layers-section">
@@ -112,6 +116,7 @@
             <option value="weekend_weekday_ratio">Weekend ÷ weekday trips (diverging)</option>
             <option value="weekend_hotspot_score">Weekend hotspot score (diverging)</option>
             <option value="weekend_hotspot_summer_minus_winter">Weekend pull: summer-onset − winter (Jun−Feb, diverging)</option>
+            <option value="weekend_ratio_summer_minus_winter">Weekend ratio: summer-onset − winter (Jun−Feb, diverging)</option>
             <option value="leisure_share">Leisure-activity trip share</option>
             <option value="commute_share">Commute-activity trip share</option>
             <option value="midday_share">Midday trip share (11–15h)</option>
@@ -208,21 +213,28 @@
       <ul>
         <li><strong>Relative index, not a guarantee.</strong> The score orders hexes within
           Catalonia; it makes no absolute or "you should move here" claim.</li>
-        <li><strong>Month-window scope, not climatology.</strong> The mobility signal pools
-          <strong>89 days across three 2025 calendar month-windows</strong> — Feb (28d),
-          May (31d), Jun (30d). The Month-window dropdown splits the season-aware metrics
+        <li><strong>Month-window scope, not climatology.</strong> These season-aware
+          <em>display</em> layers (not the score, which keeps its 7-day March-2024 mobility
+          input) pool <strong>89 days across three 2025 calendar month-windows</strong> — Feb
+          (28d), May (31d), Jun (30d). The Month-window dropdown splits the season-aware metrics
           into those three windows (winter · Feb / spring · May / summer-onset · Jun) so you
           can read where weekend pull switches on as the coast warms. This is a
           <strong>month-window comparison, not a seasonal/climate average</strong>:
           one cold month is not "winter climatology", Jun is summer-<em>onset</em> (the
           coastal weekend uplift is still building), and the contrast is a relative index —
           the starting question "where does weekend pull switch ON, Feb vs Jun?" — not a
-          year-round verdict. The summer−winter delta layer
-          (<code>weekend_hotspot_summer_minus_winter</code>, Jun−Feb) is the same metric
-          differenced per hex: warm = a hex that switches ON as a weekend hotspot in
-          summer-onset, ~0 = no shift, cool = relatively more weekend-busy in winter
-          (diverging palette, pivot 0). Across the grid it runs min −0.381 · median +0.036 ·
-          max +0.589, with <strong>75% of hexes positive</strong> — real signal, not noise.</li>
+          year-round verdict. Two summer−winter delta layers carry it (both Jun−Feb, both
+          diverging, pivot 0): <code>weekend_hotspot_summer_minus_winter</code> (the
+          leisure-weighted hotspot score differenced per hex — min −0.381 · median +0.036 ·
+          max +0.589, <strong>75% of hexes positive</strong>) and
+          <code>weekend_ratio_summer_minus_winter</code> (the raw weekend÷weekday ratio
+          differenced — a tighter min −0.280 · median +0.005 · max +0.377, 57% positive, full
+          grid coverage). Warm = a hex that tilts toward the weekend in summer-onset; ~0 = no
+          shift; cool = relatively more weekend-busy in winter. The driver is
+          <strong>coastal / second-home leisure</strong> specifically — sea-proximity is the
+          signal (correlation with distance-to-coast ≈ −0.22, a monotone shoreline decay) —
+          <em>not</em> leisure in general: high-leisure <strong>mountain</strong> hexes lean the
+          OTHER way (winter-leaning). Real signal, not noise.</li>
         <li><strong>Sparse amenity layers.</strong> Some proximity layers cover only part
           of the grid — climbing ~49%, hospitals ~31%, yoga ~15%, coast ~6%. Cells with
           no amenity in the 10 km catchment simply earn no closeness reward there (and a
@@ -331,9 +343,11 @@
           <a href="why_spark_sedona.md"><code>why_spark_sedona.md</code></a>.</p>
         <p class="caption" style="margin-bottom:0">
           Score range under the default preset: min 8 · median 59 · mean 57 · max 100 · std 14
-          across 45,220 hexes. Mobility window is <strong>89 days across three 2025
-          month-windows</strong> (Feb + May + Jun) — flip the Month-window dropdown to compare
-          them; a calendar-window comparison, not a climate average.
+          across 45,220 hexes. The score's mobility input is the original <strong>7-day
+          March-2024</strong> window (unchanged). The additive deep-Spark mobility &amp; season
+          display layers are the full-scale <strong>89-day 2025</strong> run (Feb + May + Jun) at
+          weight 0 — flip the Month-window dropdown to compare them; a calendar-window
+          comparison, not a climate average, and not a change to the published score.
           <a href="v2_revision.md">See the v2 improvement roadmap →</a></p>
       </details>
     </section>
@@ -419,10 +433,19 @@ const METRIC_CAPTIONS = {
     "a genuine weekend hotspot. Diverging, pivot 1.0. NB: the MITMA <100-device privacy floor " +
     "is applied before publication and is invisible in the expanded open data.",
   weekend_hotspot_summer_minus_winter: "Jun weekend-hotspot minus Feb (summer-onset − winter). " +
-    "Warm = switches ON as a weekend hotspot in summer-onset (coast, trail-heads, second-home " +
-    "zones); ~0 = no seasonal shift; cool = relatively more weekend-busy in winter. Null (grey) " +
-    "where either window failed the support gate — never a fake zero. Diverging, pivot 0. " +
-    "A month-window contrast, NOT climatology.",
+    "Warm = switches ON as a weekend hotspot in summer-onset — driven by COASTAL / second-home " +
+    "leisure (sea-proximity is the signal: corr with distance-to-coast ≈ −0.22, monotone " +
+    "shoreline decay). High-leisure MOUNTAIN hexes go the OTHER way (winter-leaning), so this is " +
+    "coastal leisure specifically, not leisure in general. ~0 = no seasonal shift; cool = " +
+    "relatively more weekend-busy in winter. Null (grey) where either window failed the support " +
+    "gate — never a fake zero. Diverging, pivot 0. A month-window contrast, NOT climatology.",
+  weekend_ratio_summer_minus_winter: "Jun weekend÷weekday ratio minus Feb (summer-onset − winter) " +
+    "— the second headline delta, the raw weekend-pull ratio differenced per hex (the hotspot " +
+    "delta weights it by leisure intensity). Warm = a hex that tilts more toward the weekend in " +
+    "summer-onset, again COASTAL / second-home leisure, not mountain leisure; cool = relatively " +
+    "more weekend-busy in winter. Tighter range than the hotspot delta (min −0.280 · median " +
+    "+0.005 · max +0.377, 57% positive). Full grid coverage — inline, no support gate. Diverging, " +
+    "pivot 0. A month-window contrast, NOT climatology.",
   leisure_share: "Share of inflowing trips whose destination activity is leisure (frequent / " +
     "non-frequent), vs commute/home. High = a leisure magnet. From the full activity cube. " +
     "Season-aware: use the Month-window dropdown for Feb/May/Jun.",
