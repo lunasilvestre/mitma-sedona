@@ -37,12 +37,18 @@ write.
   stations, GTFS, air-quality stations, Landsat LST, Natura 2000, E-PRTR,
   VIIRS) with pandera contract enforcement on write.
 - **Silver** — cleaned, conformed, geometry-validated layers.
-- **Gold** — the analytical grain: `data/gold/h3_res8_catalonia.parquet`,
-  45,220 hexes at H3 res-8 (~0.7 km² hexes), carrying ~20 real feature columns
-  (mobility, amenity-proximity, nature, environmental-health and penalty terms)
-  plus the final `liveability_score`. Distance/buffer features are computed in
-  EPSG:25831 metres. The exact column contract is `GOLD_HEX_SCHEMA` in
-  `src/catmob/schemas.py`; `scripts/run_gold_v2.py` assembles the grid.
+- **Gold** — the analytical grain: `data/gold/h3_res8_catalonia_v2.parquet`,
+  **45,220 hexes × 26 columns** at H3 res-8 (~0.7 km² hexes), carrying the real
+  feature columns (mobility, amenity-proximity, nature, environmental-health and
+  penalty terms) that drive the `liveability_score`. Distance/buffer features are
+  computed in EPSG:25831 metres. The exact column contract is `GOLD_HEX_SCHEMA`
+  in `src/catmob/schemas.py`; `scripts/run_gold_v2.py` assembles the grid.
+  The additive **deep-Spark mobility gold**
+  (`data/gold/mitma_features/zoning=distritos/h3_mitma_features.parquet` —
+  46,121 hexes × 37 columns, plus `seasonal_long.parquet`) is a separate Sedona
+  output that feeds the geo-browser's mobility/rhythm/typology/season layers; it
+  ships at weight 0, so the published score is unchanged. See
+  [why_spark_sedona.md](why_spark_sedona.md).
 
 See [PLAN.md §4](../PLAN.md) for the full lakehouse design.
 
@@ -64,8 +70,16 @@ not placeholders:
 - `io_biodiversity` / `io_health` — Natura 2000 + tree-cover + health POIs →
   `natura2000_within_5km`, `tree_cover_pct`, `hospital_min_m`.
 
-Only the GBIF species-observation feed (`biodiversity_obs_density`) is not yet
-landed — its column is held NULL and contributes 0 to the score.
+- `io_biodiversity` also lands the GBIF/iNaturalist species feed →
+  `biodiversity_obs_density` (observations per km², 100% hex coverage, ~6.2k
+  hexes non-zero).
+
+All v2.3 score columns now carry real signal; coverage varies by layer (the
+manifest records per-column fractions). The additive deep-Spark mobility layers
+(rhythm, weekend hotspots, KMeans typology, geodemographics, the month/season
+dimension) are built by the canonical `pipeline_{silver,gold}.py` Sedona path
+from the full-scale 89-day-2025 OD scan — see
+[why_spark_sedona.md](why_spark_sedona.md).
 
 ## Sedona SQL idioms
 
