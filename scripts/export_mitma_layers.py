@@ -65,6 +65,18 @@ SOURCES = {
 # fecha 20250201..20250630.
 SILVER_OD = REPO / "data" / "silver" / "od_silver"
 
+# Zone polygons (EPSG:4326 / CRS84 lon-lat, ``ID`` property) — the geometry source
+# for arc endpoints. Zone centroids anchor each OD corridor's source/target, exactly
+# as the Spark od_arcs builder does via ST_Centroid(geom_ll).
+ZONES_GEOJSON = REPO / "data" / "bronze" / "mitma" / "zones" / "zonificacion_distritos.geojson"
+
+# OD arc layer: how many of the strongest inter-zone corridors to ship. The 5,000
+# top corridors reproduce the original story-layer density (commit 77bc004); the
+# deep-Spark re-export had silently capped this at 250. The browser's data-driven
+# width domain (_computeArcDomain/_arcWidth) adapts to whatever flow magnitude the
+# resulting set carries — no magic width constant rides on this number.
+ARC_TOP_N = 5000
+
 # Fallback window if the silver partitions aren't on disk (e.g. exporting from a
 # gold-only checkout). Matches scripts/run_full_scale.sh FECHA_START/FECHA_END.
 FALLBACK_WINDOW = "89 days, 2025 (2025-02 + 2025-05 + 2025-06; 20250201..20250630)"
@@ -181,6 +193,23 @@ def _round_mobility(df: pd.DataFrame) -> None:
             df[c] = df[c].round(3)
 
 
+def _silver_fechas(zoning: str = "distritos") -> list[str]:
+    """Sorted distinct fecha=YYYYMMDD partition keys under the silver od_silver dir.
+
+    Single source of truth for the analytic window's day set — used both by
+    ``_derive_window`` (manifest provenance string) and ``_build_arcs`` (the
+    trips/day divisor). Returns [] if the partitions aren't on disk.
+    """
+    part_root = SILVER_OD / f"zoning={zoning}"
+    if not part_root.exists():
+        return []
+    return sorted(
+        p.name.split("=", 1)[1]
+        for p in part_root.iterdir()
+        if p.is_dir() and p.name.startswith("fecha=") and p.name.split("=", 1)[1].isdigit()
+    )
+
+
 def _derive_window(zoning: str = "distritos") -> str:
     """Derive the mobility window string from the silver od_silver partition dirs.
 
@@ -190,14 +219,7 @@ def _derive_window(zoning: str = "distritos") -> str:
     day count and contributing month set — self-correcting, so it can never drift
     from the data on disk. Falls back to FALLBACK_WINDOW if silver is absent.
     """
-    part_root = SILVER_OD / f"zoning={zoning}"
-    if not part_root.exists():
-        return FALLBACK_WINDOW
-    fechas = sorted(
-        p.name.split("=", 1)[1]
-        for p in part_root.iterdir()
-        if p.is_dir() and p.name.startswith("fecha=") and p.name.split("=", 1)[1].isdigit()
-    )
+    fechas = _silver_fechas(zoning)
     if not fechas:
         return FALLBACK_WINDOW
     lo, hi = fechas[0], fechas[-1]
@@ -306,6 +328,77 @@ def _load_arcs(src: dict) -> list[dict]:
     return out
 
 
+def _build_arcs(zoning: str = "distritos", top_n: int = ARC_TOP_N) -> list[dict] | None:
+    """Build the top-N inter-zone OD arcs as trips/day, straight from silver.
+
+    This is the canonical arc layer and replaces the stale gold ``arcs.json``
+    passthrough (``_load_arcs``), which had regressed to 250 corridors whose
+    ``flow`` was a raw 89-day SUM of ``viajes`` (range ~807k–7.87M). It mirrors
+    the Spark ``catmob.pipeline_gold.od_arcs`` semantics exactly — inter-zone
+    pairs, sum ``viajes`` over the window, take the strongest ``top_n``, anchor
+    each endpoint at its zone centroid — but does it with a light pandas read of
+    the dated od_silver partitions (no Spark), and crucially divides the windowed
+    sum by the DAY COUNT so ``flow`` is expressed in **trips/day**.
+
+    The divisor is the number of distinct fecha partitions on disk (derived, never
+    hardcoded — the full-scale window is 89 days: Feb + May + Jun 2025), so it
+    self-corrects to whatever window was actually ingested. Returns the deck.gl
+    ArcLayer flat shape ``{source_lon, source_lat, target_lon, target_lat, flow}``;
+    returns None if the silver partitions or the zones geojson are absent, so the
+    caller can fall back to the gold passthrough.
+    """
+    fechas = _silver_fechas(zoning)
+    part_root = SILVER_OD / f"zoning={zoning}"
+    if not fechas or not ZONES_GEOJSON.exists():
+        return None
+    n_days = len(fechas)
+
+    # Sum viajes per inter-zone (origen, destino) pair across the whole window.
+    # Read only the three columns we need, one partition at a time, to keep the
+    # ~390M-row scan inside a modest memory budget.
+    import glob
+
+    parts = sorted(glob.glob(str(part_root / "fecha=*" / "*.parquet")))
+    agg: pd.DataFrame | None = None
+    for p in parts:
+        df = pd.read_parquet(p, columns=["origen", "destino", "viajes"])
+        df = df[df["origen"] != df["destino"]]
+        g = df.groupby(["origen", "destino"], as_index=False)["viajes"].sum()
+        agg = g if agg is None else (
+            pd.concat([agg, g], ignore_index=True)
+            .groupby(["origen", "destino"], as_index=False)["viajes"].sum()
+        )
+    if agg is None or agg.empty:
+        return None
+
+    top = agg.nlargest(top_n, "viajes").copy()
+    # raw window SUM -> trips/day (the unit the caption + tooltip promise).
+    top["flow"] = top["viajes"] / n_days
+
+    # Zone centroids in lon/lat (EPSG:4326) — matches ST_Centroid(geom_ll).
+    import geopandas as gpd
+
+    zones = gpd.read_file(ZONES_GEOJSON)[["ID", "geometry"]]
+    cents = zones.geometry.centroid
+    cmap = {
+        str(zid): (float(pt.x), float(pt.y))
+        for zid, pt in zip(zones["ID"].astype(str), cents)
+    }
+
+    out: list[dict] = []
+    for r in top.itertuples(index=False):
+        s = cmap.get(str(r.origen))
+        t = cmap.get(str(r.destino))
+        if s is None or t is None:  # zone not in geojson (Spark inner join drops it too)
+            continue
+        out.append({
+            "source_lon": round(s[0], 6), "source_lat": round(s[1], 6),
+            "target_lon": round(t[0], 6), "target_lat": round(t[1], 6),
+            "flow": round(float(r.flow), 2),
+        })
+    return out
+
+
 def _load_seasonal(src: dict) -> dict:
     """Read seasonal_long.parquet -> nested {h3_id: {season: {short:val}}}.
 
@@ -380,10 +473,22 @@ def main() -> None:
     _dump(OUT / "rhythm.json", rmap)
     print(f"OK rhythm.json: {len(rmap):,} hex 24h profiles")
 
-    # --- arcs (Sedona-built, normalised to the deck.gl ArcLayer flat shape) ----
-    arcs = _load_arcs(src)
+    # --- arcs: top-N strongest inter-zone corridors as TRIPS/DAY ---------------
+    # Built straight from the dated silver od_silver partitions (light pandas read,
+    # no Spark): sum viajes per inter-zone pair over the window, take the strongest
+    # ARC_TOP_N, divide by the day count -> trips/day. Falls back to the gold
+    # arcs.json passthrough only when silver isn't on disk (gold-only checkout).
+    arcs = _build_arcs("distritos", ARC_TOP_N)
+    if arcs is None:
+        arcs = _load_arcs(src)
+        print(f"·· arcs: silver absent — fell back to gold passthrough ({len(arcs):,})")
     _dump(OUT / "arcs.json", arcs)
-    print(f"OK arcs.json: {len(arcs):,} Sedona-built OD arcs")
+    if arcs:
+        _flows = [a["flow"] for a in arcs]
+        print(f"OK arcs.json: {len(arcs):,} OD corridors  "
+              f"flow(trips/day) {min(_flows):,.1f}..{max(_flows):,.1f}")
+    else:
+        print("OK arcs.json: 0 arcs")
 
     # --- seasonal sidecar: lazy seasons.json (nested per-(h3 x season), short keys)
     # Three calendar month-windows (feb/may/jun), NOT a climate average. Loaded by
