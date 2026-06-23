@@ -27,6 +27,17 @@ pipeline under open-data constraints.
 > [`docs/explore.html`](docs/explore.html) +
 > [`docs/app/geobrowser-map.js`](docs/app/geobrowser-map.js).
 
+[![Catalonia mobility flows — the OD-Flows Explorer rendering MITMA origin–destination
+corridors as clustered super-nodes and animated flow lines over a dark basemap, beside
+the dark control panel. Captured from docs/flows.html.](docs/screenshots/flows_hero.png)](docs/flows.html)
+
+> **▶ [Explore the mobility flows →](https://lunasilvestre.github.io/mitma-sedona/flows.html)** —
+> a keyless deck.gl + Flowmap.gl origin–destination explorer over the same MITMA matrix:
+> zoom-LOD clustering into super-nodes, an hour-of-day scrubber, Feb/May/Jun season
+> slices, and typed picking on any flow or node. Source:
+> [`docs/flows.html`](docs/flows.html) +
+> [`docs/app/flows_fm/main.js`](docs/app/flows_fm/main.js).
+
 ## Why this exists
 
 National "best places to live" rankings are coarse, opinion-weighted, and

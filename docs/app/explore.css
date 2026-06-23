@@ -60,6 +60,31 @@ html, body {
   text-transform: uppercase;
   margin: 0 0 14px;
 }
+
+/* Companion link to the sibling OD-flows explorer (flows.html). A tasteful pill
+   in the panel header, styled from the existing dark-UI tokens. */
+#panel a.companion-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  background: rgba(136, 212, 255, 0.10);
+  border: 1px solid rgba(136, 212, 255, 0.30);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+#panel a.companion-link:hover {
+  background: rgba(136, 212, 255, 0.18);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+#panel a.companion-link span { font-size: 13px; }
 #panel h2 {
   font-size: 12px;
   text-transform: uppercase;

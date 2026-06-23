@@ -1,0 +1,12 @@
+{
+  "generated": "2026-06-22T12:12:05.841Z",
+  "note": "Self-contained UMD bundles (esbuild dist.dev.js) per @deck.gl subpath, wrapped by same-origin ESM shims. NO aggregate deck.gl entry (avoids @deck.gl/react). NO unbundled subpath graph (avoids apache-arrow/flatbuffers/tslib + node-builtin browser-field swaps).",
+  "packages": {
+    "@deck.gl/core": "9.3.4",
+    "@deck.gl/layers": "9.3.4",
+    "@deck.gl/extensions": "9.3.4",
+    "@deck.gl/mapbox": "9.3.4",
+    "maplibre-gl": "4.7.1",
+    "h3-js": "4.1.0"
+  }
+}

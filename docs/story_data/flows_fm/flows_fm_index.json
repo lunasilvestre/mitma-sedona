@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "variant": "flowmap",
+  "unit": "trips_per_day",
+  "n_per_slice": 8000,
+  "hours": 24,
+  "locations_url": "locations.json",
+  "location_count": 599,
+  "grid": {
+    "windows": [
+      "feb",
+      "may",
+      "jun"
+    ],
+    "daytypes": [
+      "weekday",
+      "weekend"
+    ]
+  },
+  "window_labels": {
+    "feb": "Feb 2025 (winter)",
+    "may": "May 2025 (spring)",
+    "jun": "Jun 2025 (summer-onset)"
+  },
+  "global_flow_domain": [
+    258.64,
+    93459.72
+  ],
+  "global_hour_flow_domain": [
+    0.0,
+    7423.8
+  ],
+  "slices": [
+    {
+      "key": "feb_weekday",
+      "window": "feb",
+      "daytype": "weekday",
+      "is_weekend": false,
+      "n": 8000,
+      "day_count": 20,
+      "flow_min": 351.77,
+      "flow_max": 90343.45,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 7423.8,
+      "flows_url": "feb_weekday.json",
+      "flows_bytes": 1646174,
+      "includes_am_zones": true
+    },
+    {
+      "key": "feb_weekend",
+      "window": "feb",
+      "daytype": "weekend",
+      "is_weekend": true,
+      "n": 7994,
+      "day_count": 8,
+      "flow_min": 258.64,
+      "flow_max": 78907.37,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 6272.97,
+      "flows_url": "feb_weekend.json",
+      "flows_bytes": 1631762,
+      "includes_am_zones": true
+    },
+    {
+      "key": "may_weekday",
+      "window": "may",
+      "daytype": "weekday",
+      "is_weekend": false,
+      "n": 8000,
+      "day_count": 22,
+      "flow_min": 362.93,
+      "flow_max": 93459.72,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 7386.93,
+      "flows_url": "may_weekday.json",
+      "flows_bytes": 1649768,
+      "includes_am_zones": true
+    },
+    {
+      "key": "may_weekend",
+      "window": "may",
+      "daytype": "weekend",
+      "is_weekend": true,
+      "n": 7999,
+      "day_count": 9,
+      "flow_min": 282.07,
+      "flow_max": 83918.89,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 6430.3,
+      "flows_url": "may_weekend.json",
+      "flows_bytes": 1639925,
+      "includes_am_zones": true
+    },
+    {
+      "key": "jun_weekday",
+      "window": "jun",
+      "daytype": "weekday",
+      "is_weekend": false,
+      "n": 8000,
+      "day_count": 21,
+      "flow_min": 354.49,
+      "flow_max": 90693.5,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 6675.48,
+      "flows_url": "jun_weekday.json",
+      "flows_bytes": 1651491,
+      "includes_am_zones": true
+    },
+    {
+      "key": "jun_weekend",
+      "window": "jun",
+      "daytype": "weekend",
+      "is_weekend": true,
+      "n": 8000,
+      "day_count": 9,
+      "flow_min": 271.65,
+      "flow_max": 79330.36,
+      "hour_flow_min": 0.0,
+      "hour_flow_max": 5954.53,
+      "flows_url": "jun_weekend.json",
+      "flows_bytes": 1640652,
+      "includes_am_zones": true
+    }
+  ],
+  "notes": "Flowmap (relational) A/B variant of the OD-flows applet. Same upstream pipeline as docs/story_data/flows (silver bucketing, per-(origen,destino) viajes aggregation with a 24h pivot, windowed-sum / day_count divisor, top-N=8000 deterministic tie-break, distrito-centroid anchoring) \u2014 only the output shape differs. locations.json = [{id,lon,lat}] for every referenced distrito (no name column in the source geojson). Each <window>_<daytype>.json = [{origin,dest,count,hourly[24]}] where count is trips/day and hourly[h] is that hour's trips/day (Sum(hourly)~=count); scrub hour h by setting count=hourly[h]. month-window comparison, NOT a climate average; 3 months on disk (Feb/May/Jun)."
+}

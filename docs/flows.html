@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catalonia mobility flows — OD-Flows Explorer</title>
+  <meta name="description"
+    content="An interactive origin–destination flow explorer for Catalonia: a @flowmap.gl/layers 9.4 FlowmapLayer (zoom-LOD clustering + animated particles + framework width/colour scales) rendering 8000 real OD corridors from the MITMA mobility matrix over a keyless deck.gl + MapLibre dark basemap. Hour scrubber, season slices, typed picking. Fully vendored, no CDN, no build step, no React." />
+
+  <!-- Vendored MapLibre CSS (same-origin). -->
+  <link rel="stylesheet" href="vendor/maplibre/4.7/maplibre-gl.css" />
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #06080d; color: #e8eef6;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #app { position: fixed; inset: 0; display: flex; }
+    #panel { width: 320px; padding: 18px 16px; box-sizing: border-box;
+      background: #0b0f17; border-right: 1px solid #1c2430; overflow: auto; }
+    #panel h1 { font-size: 15px; margin: 0 0 6px; letter-spacing: .02em; }
+    #panel p { font-size: 12px; line-height: 1.5; color: #9fb0c3; margin: 8px 0; }
+    .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: #11202e; color: #5fd0ff; border: 1px solid #1d3a4d; margin: 2px 4px 2px 0; }
+    code { color: #cfe6ff; }
+    /* Lede banner — the one-line product description that frames the explorer. */
+    #lede-banner { margin: 10px 0 4px; padding: 8px 10px; border-radius: 7px;
+      background: #11202e; border: 1px solid #1d3a4d; font-size: 11.5px; line-height: 1.45;
+      color: #b7c6d8; }
+    #lede-banner strong { color: #5fd0ff; }
+    /* Default views (Phase 3) — four curated preset bundles that each restore a full
+       lever state (slice, hour, top-N, basemap, camera). Adapted from the v1 §6.1 set. */
+    #views { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #views .label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; margin: 0 0 8px; }
+    #view-list { display: flex; flex-direction: column; gap: 6px; }
+    .view-btn { display: block; width: 100%; box-sizing: border-box; text-align: left;
+      background: #0c1420; color: #d7e3f0; border: 1px solid #1d3a4d; border-radius: 7px;
+      padding: 8px 10px; font-size: 12px; font-family: inherit; cursor: pointer;
+      transition: background .15s, border-color .15s; line-height: 1.35; }
+    .view-btn:hover { background: #11202e; border-color: #2c5670; }
+    .view-btn:focus { outline: none; border-color: #5fd0ff; }
+    .view-btn[aria-pressed="true"] { background: #11202e; border-color: #5fd0ff; color: #e8eef6; }
+    .view-btn strong { display: block; font-size: 12px; font-weight: 600; color: #cfe6ff;
+      letter-spacing: .01em; margin: 0 0 2px; }
+    .view-btn span { display: block; font-size: 11px; color: #7e90a4; }
+    #views-hint { font-size: 11px; color: #5d6b7d; margin: 8px 0 0; min-height: 14px; }
+    /* Slice switcher (Phase 3) — a month-window <select> (feb/may/jun) + a
+       weekday/weekend segmented toggle. Composing them swaps the ACTIVE flows table
+       fed into the LocalFlowmapDataProvider (a debounced data-prop swap). */
+    #slices { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #slices .label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; margin: 0 0 8px; }
+    #slices select { width: 100%; box-sizing: border-box; margin: 0 0 10px;
+      background: #0c1420; color: #e8eef6; border: 1px solid #1d3a4d; border-radius: 6px;
+      padding: 7px 8px; font-size: 12px; font-family: inherit; cursor: pointer;
+      accent-color: #5fd0ff; }
+    #slices select:focus { outline: none; border-color: #5fd0ff; }
+    /* Segmented weekday/weekend toggle — two radio buttons painted as a pill pair. */
+    #daytype-toggle { display: flex; gap: 0; border: 1px solid #1d3a4d; border-radius: 8px;
+      overflow: hidden; }
+    #daytype-toggle label { flex: 1; text-align: center; font-size: 12px; padding: 7px 0;
+      color: #9fb0c3; cursor: pointer; user-select: none; transition: background .15s, color .15s;
+      letter-spacing: .02em; }
+    #daytype-toggle label + label { border-left: 1px solid #1d3a4d; }
+    #daytype-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    #daytype-toggle input:checked + span { color: #06080d; }
+    #daytype-toggle label:has(input:checked) { background: #5fd0ff; }
+    #daytype-toggle label:has(input:checked) span { color: #06080d; font-weight: 600; }
+    #slice-hint { font-size: 11px; color: #5d6b7d; margin: 8px 0 0; min-height: 14px; }
+    /* Hour scrubber (Phase 3) — a debounced range input that rebuilds every flow's
+       count = hourly[h] and swaps the provider's flows table. Flowmap re-aggregates
+       clustering on each change, so this is DEBOUNCED ~250ms (less reactive than v1
+       — the honesty caption says so). */
+    #scrubber { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #scrubber .row { display: flex; align-items: baseline; justify-content: space-between; }
+    #scrubber label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; }
+    #hour-label { font-size: 15px; font-variant-numeric: tabular-nums; color: #5fd0ff;
+      font-weight: 600; }
+    #hour-range { width: 100%; margin: 10px 0 2px; accent-color: #5fd0ff; cursor: pointer; }
+    #hour-ticks { display: flex; justify-content: space-between; font-size: 10px; color: #5d6b7d;
+      font-variant-numeric: tabular-nums; }
+    .scrub-controls { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    #hour-play { flex: 0 0 auto; background: #11202e; color: #5fd0ff; border: 1px solid #1d3a4d;
+      border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+      font-family: inherit; cursor: pointer; transition: background .15s, border-color .15s; }
+    #hour-play:hover { background: #15293a; border-color: #2c5670; }
+    #hour-play:focus-visible { outline: 2px solid #5fd0ff; outline-offset: 2px; }
+    #hour-play[aria-pressed="true"] { background: #0c2417; color: #5bd99a; border-color: #1d5238; }
+    #hour-hint { font-size: 11px; color: #5d6b7d; margin: 0; min-height: 14px; }
+    /* Top-N lever (Phase 3) — maxTopFlowsDisplayNum. The flowmap analog of the v1
+       volume threshold: flowmap draws only the top-N strongest flows, taming the
+       Barcelona hairball. A debounced re-render. */
+    #topn { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #topn .row { display: flex; align-items: baseline; justify-content: space-between; }
+    #topn label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; }
+    #topn-label { font-size: 15px; font-variant-numeric: tabular-nums; color: #5fd0ff;
+      font-weight: 600; }
+    #topn-range { width: 100%; margin: 10px 0 2px; accent-color: #5fd0ff; cursor: pointer; }
+    #topn-hint { font-size: 11px; color: #5d6b7d; margin: 8px 0 0; min-height: 14px;
+      font-variant-numeric: tabular-nums; }
+    /* Clustering toggle (Phase 3) — the headline differentiator vs v1. ON shows the
+       zoom-LOD super-nodes; OFF draws every flow ungrouped. */
+    #clustering { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #clustering-row { display: flex; align-items: center; gap: 9px; cursor: pointer;
+      font-size: 12px; color: #d7e3f0; letter-spacing: .02em; user-select: none; }
+    #clustering-toggle { width: 16px; height: 16px; accent-color: #5fd0ff; cursor: pointer; }
+    #clustering-toggle:focus-visible { outline: 2px solid #5fd0ff; outline-offset: 2px; }
+    #clustering-hint { font-size: 11px; color: #5d6b7d; margin: 8px 0 0; }
+    /* Basemap switch (Phase 3) — matches the live shell's keyless basemap registry.
+       Swapping it calls map.setStyle on the PASSIVE MapLibre host only; deck.gl
+       keeps the camera + the flowmap layer (a sibling canvas above) untouched. */
+    #basemap { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #basemap .label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; margin: 0 0 8px; }
+    #basemap select { width: 100%; box-sizing: border-box;
+      background: #0c1420; color: #e8eef6; border: 1px solid #1d3a4d; border-radius: 6px;
+      padding: 7px 8px; font-size: 12px; font-family: inherit; cursor: pointer; }
+    #basemap select:focus { outline: none; border-color: #5fd0ff; }
+    #basemap-hint { font-size: 11px; color: #5d6b7d; margin: 8px 0 0; min-height: 14px; }
+    /* Hover readout — typed picking (flow vs location/cluster super-node). */
+    #pickout { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #pickout .label { font-size: 12px; color: #9fb0c3; letter-spacing: .02em; margin: 0 0 8px; }
+    #pick-readout { font-size: 11.5px; line-height: 1.5; color: #b7c6d8; min-height: 32px;
+      font-variant-numeric: tabular-nums; }
+    #pick-readout strong { color: #cfe6ff; }
+    /* Honesty caption + attribution — month-window scope note + MITMA credit. */
+    #honesty { margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #1c2430; }
+    #honesty .caption { font-size: 11px; line-height: 1.55; color: #b7c6d8; margin: 0 0 8px; }
+    #honesty .caption strong { color: #cfe6ff; }
+    #honesty .attrib { font-size: 10.5px; line-height: 1.5; color: #6f8095; margin: 0; }
+    #honesty .attrib a { color: #5fd0ff; text-decoration: none; }
+    #honesty .attrib a:hover { text-decoration: underline; }
+    #stage { position: relative; flex: 1; }
+    /* The MapLibre basemap host (passive, interactive:false) sits underneath. */
+    #map { position: absolute; inset: 0; }
+    /* The deck.gl canvas is a SIBLING stacked ABOVE the basemap; deck owns the camera. */
+    #deck-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; }
+    .maplibregl-ctrl-attrib { font-size: 10px; }
+    /* Mobile panel toggle — hidden on desktop; a floating button on narrow screens. */
+    #panel-toggle { display: none; }
+    @media (max-width: 760px) {
+      #app { flex-direction: column; }
+      #panel-toggle {
+        display: inline-flex; align-items: center; gap: 6px;
+        position: fixed; top: 10px; left: 10px; z-index: 6;
+        background: #0b0f17ee; color: #5fd0ff; border: 1px solid #1d3a4d;
+        border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+        font-family: inherit; cursor: pointer; backdrop-filter: blur(4px);
+      }
+      #panel-toggle:focus-visible { outline: 2px solid #5fd0ff; outline-offset: 2px; }
+      #panel {
+        position: fixed; inset: 52px 0 auto 0; width: auto; max-height: 70vh;
+        border-right: none; border-bottom: 1px solid #1c2430; z-index: 5;
+        box-shadow: 0 8px 28px #000a; transition: transform .22s ease;
+      }
+      #app[data-panel="closed"] #panel { transform: translateY(calc(-100% - 52px)); }
+      #app[data-panel="closed"] #panel { pointer-events: none; }
+      #stage { flex: 1; min-height: 100%; }
+      #panel h1 { margin-top: 4px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #panel { transition: none; }
+    }
+  </style>
+
+  <!--
+    LOAD ORDER IS LOAD-BEARING (vendored, all same-origin, ZERO third-party CDN):
+      1. h3-js UMD as a CLASSIC script FIRST (deck's bundled H3 shim caches
+         globalThis.h3 at eval time — defensive, this page draws no H3 layer).
+      2. The four self-contained @deck.gl/* UMD bundles in dependency order. core
+         sets globalThis.luma / globalThis.loaders; each addon reads globalThis.deck
+         and re-exports it, so globalThis.deck ACCUMULATES Deck + CompositeLayer +
+         ScatterplotLayer + TextLayer + Widget + picking + project32, and
+         globalThis.luma exposes Geometry + Model — EXACTLY the bindings
+         @flowmap.gl/layers needs. This is the SAME single deck/luma instance the v1
+         applet uses; the flowmap shims below re-export these globals, so there is
+         NO second deck copy.
+      3. MapLibre 4.7 UMD (sets globalThis.maplibregl).
+    The import-map then resolves every bare ESM specifier (flowmap + its FLAT,
+    import-map-resolvable transitive graph: d3-*, kdbush, reselect, seedrandom,
+    @math.gl/*) to a same-origin file under vendor/ — never a third-party CDN.
+  -->
+  <script src="vendor/h3-js/4.1/h3-js.umd.js"></script>
+  <script src="vendor/deck/9.3/deck-core.umd.js"></script>
+  <script src="vendor/deck/9.3/deck-layers.umd.js"></script>
+  <script src="vendor/deck/9.3/deck-extensions.umd.js"></script>
+  <script src="vendor/deck/9.3/deck-mapbox.umd.js"></script>
+  <script src="vendor/maplibre/4.7/maplibre-gl.js"></script>
+
+  <!-- One import-map entry per bare specifier the flowmap graph imports. EVERY
+       target is a same-origin file under vendor/. The three deck/luma entries point
+       at SHIMS that re-export globalThis.deck / globalThis.luma — so flowmap reuses
+       our ONE deck instance instead of fetching/loading a second copy. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@deck.gl/core":          "./vendor/deck/9.3/core.shim.js",
+      "@deck.gl/layers":        "./vendor/deck/9.3/layers.shim.js",
+      "@luma.gl/engine":        "./vendor/luma/9.x/engine.shim.js",
+      "maplibre-gl":            "./vendor/maplibre/4.7/maplibre-gl.shim.js",
+
+      "@flowmap.gl/layers":     "./vendor/flowmap/9.4/layers/index.js",
+      "@flowmap.gl/data":       "./vendor/flowmap/9.4/data/index.js",
+
+      "@math.gl/web-mercator":  "./vendor/mathgl/web-mercator/index.js",
+      "@math.gl/core":          "./vendor/mathgl/core/index.js",
+
+      "d3-array":               "./vendor/d3/d3-array/index.js",
+      "d3-color":               "./vendor/d3/d3-color/index.js",
+      "d3-format":              "./vendor/d3/d3-format/index.js",
+      "d3-geo":                 "./vendor/d3/d3-geo/index.js",
+      "d3-interpolate":         "./vendor/d3/d3-interpolate/index.js",
+      "d3-scale":               "./vendor/d3/d3-scale/index.js",
+      "d3-scale-chromatic":     "./vendor/d3/d3-scale-chromatic/index.js",
+      "d3-time":                "./vendor/d3/d3-time/index.js",
+      "d3-time-format":         "./vendor/d3/d3-time-format/index.js",
+      "internmap":              "./vendor/d3/internmap/index.js",
+
+      "kdbush":                 "./vendor/kdbush/0.x/index.js",
+      "reselect":               "./vendor/reselect/5.x/reselect.browser.mjs",
+      "seedrandom":             "./vendor/seedrandom/3.x/seedrandom.shim.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Mobile panel toggle: on narrow screens the panel becomes a collapsible top
+         sheet so the map gets the full viewport on a phone. -->
+    <button id="panel-toggle" type="button" aria-controls="panel" aria-expanded="true"
+      aria-label="Show or hide the controls panel">Controls</button>
+    <aside id="panel">
+      <h1>Catalonia mobility flows</h1>
+
+      <!-- Lede banner: the one-line product description that frames the explorer. -->
+      <p id="lede-banner"><strong>OD-Flows Explorer.</strong> An interactive map of
+        8000 real origin–destination corridors across Catalonia, drawn with zoom-LOD
+        clustering, animated flow particles, and framework width/colour scales — scrub
+        the hour, switch the season, and pick any flow or node.</p>
+
+      <p>A <code>FlowmapLayer</code> (a deck.gl <code>CompositeLayer</code>) renders
+        Catalonia OD corridors with <code>clusteringEnabled</code> zoom-LOD super-nodes,
+        particle <code>flowLinesRenderingMode:'animated-straight'</code>, and
+        <code>adaptiveScalesEnabled</code> framework scales, over a passive keyless
+        MapLibre dark basemap. The camera is owned by
+        <code>deck.Deck({controller:true})</code>; MapLibre follows via
+        <code>onViewStateChange → map.jumpTo</code>.</p>
+      <p>
+        <span class="pill">flowmap.gl 9.4</span>
+        <span class="pill">deck.gl 9.3</span>
+        <span class="pill">MapLibre 4.7</span>
+        <span class="pill">no CDN</span>
+        <span class="pill">no build</span>
+        <span class="pill">no React</span>
+      </p>
+      <p>Drag the map to pan/zoom — deck.gl is the sole camera authority; the
+        clusters re-form per zoom level.</p>
+
+      <!-- Default views (Phase 3): four curated preset bundles adapted from the v1
+           §6.1 set. Each button restores a full lever state (slice, hour, top-N,
+           basemap, camera). -->
+      <section id="views">
+        <p class="label">Default views</p>
+        <div id="view-list" role="group" aria-label="Curated default views"></div>
+        <p id="views-hint" aria-live="polite">Four curated camera + lever presets.</p>
+      </section>
+
+      <!-- Slice switcher (Phase 3): the month-window <select> (feb/may/jun) and the
+           weekday/weekend toggle compose the active slice key. Changing either swaps
+           the flows table fed into the LocalFlowmapDataProvider (a debounced data swap
+           — flowmap re-aggregates clustering, so we settle on the debounce). -->
+      <section id="slices">
+        <p class="label">Time slice</p>
+        <select id="window-select" aria-label="Month window">
+          <option value="feb">February 2025 — winter</option>
+          <option value="may">May 2025 — spring</option>
+          <option value="jun">June 2025 — summer onset</option>
+        </select>
+        <div id="daytype-toggle" role="radiogroup" aria-label="Day type">
+          <label><input type="radio" name="daytype" value="weekday" checked /><span>Weekday</span></label>
+          <label><input type="radio" name="daytype" value="weekend" /><span>Weekend</span></label>
+        </div>
+        <p id="slice-hint" aria-live="polite">Slice <code>may_weekday</code> — 8000 corridors.</p>
+      </section>
+
+      <!-- Hour scrubber (Phase 3): rebuilds each flow's count = hourly[h] and swaps
+           the provider's flows table. Flowmap re-aggregates clustering on every
+           change, so this is DEBOUNCED ~250ms — noticeably less reactive than the v1
+           ArcLayer (a single uniform/attribute change). The caption is honest about it. -->
+      <section id="scrubber">
+        <div class="row">
+          <label for="hour-range">Hour of day</label>
+          <span id="hour-label" aria-live="polite">08:00</span>
+        </div>
+        <input id="hour-range" type="range" min="0" max="23" step="1" value="8"
+          aria-label="Hour of day, 0 to 23" aria-valuetext="08:00" />
+        <div id="hour-ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+        <div class="scrub-controls">
+          <button id="hour-play" type="button" aria-pressed="false"
+            aria-label="Play the hour animation">▶ Play</button>
+          <p id="hour-hint">Each flow's weight = trips in this hour. Re-clusters on a ~250 ms debounce.</p>
+        </div>
+      </section>
+
+      <!-- Top-N lever (Phase 3): maxTopFlowsDisplayNum — flowmap draws only the
+           top-N strongest flows. The flowmap analog of the v1 volume threshold:
+           lowering it thins the Barcelona hairball. A debounced re-render. -->
+      <section id="topn">
+        <div class="row">
+          <label for="topn-range">Top flows shown</label>
+          <span id="topn-label" aria-live="polite">5000</span>
+        </div>
+        <input id="topn-range" type="range" min="200" max="8000" step="100" value="5000"
+          aria-label="Maximum number of top flows to display" />
+        <p id="topn-hint">Flowmap keeps the strongest corridors. Lower it to thin the hairball.</p>
+      </section>
+
+      <!-- Clustering toggle (Phase 3): the headline differentiator vs v1. ON shows
+           zoom-LOD super-nodes that re-form per zoom level; OFF draws every flow
+           ungrouped. -->
+      <section id="clustering">
+        <label id="clustering-row">
+          <input type="checkbox" id="clustering-toggle" checked />
+          <span>Zoom-LOD clustering (super-nodes)</span>
+        </label>
+        <p id="clustering-hint">The headline flowmap feature: clusters re-form as you zoom.</p>
+      </section>
+
+      <!-- Basemap switch (Phase 3): the same keyless registry the live shell ships.
+           Swapping it calls map.setStyle on the PASSIVE MapLibre host only — deck.gl
+           keeps the camera and the flowmap layer (a sibling canvas above) untouched. -->
+      <section id="basemap">
+        <p class="label">Basemap</p>
+        <select id="basemap-select" aria-label="Basemap">
+          <option value="dark">Dark — CARTO dark matter</option>
+          <option value="satellite">Satellite — Esri World Imagery</option>
+          <option value="light">Light — CARTO Positron</option>
+          <option value="osm">OSM — OpenFreeMap Bright</option>
+        </select>
+        <p id="basemap-hint" aria-live="polite">Keyless. The flows stay on top; the view is preserved.</p>
+      </section>
+
+      <!-- Hover readout (Phase 3): typed picking. A hovered flow line shows its
+           origin→dest + trips; a hovered circle shows the location / cluster
+           super-node id + its in/out totals. -->
+      <section id="pickout">
+        <p class="label">Hover</p>
+        <p id="pick-readout" aria-live="polite">Hover a flow or a node to inspect it.</p>
+      </section>
+
+      <!-- Honesty caption + attribution: the month-window scope note plus a note on
+           the clustering re-aggregation that makes the levers settle on a debounce. -->
+      <section id="honesty">
+        <p class="caption">These are <strong>month-window comparisons</strong>
+          (Feb / May / Jun 2025), <strong>not</strong> a climate average. Flowmap
+          re-aggregates its zoom-LOD super-nodes on every hour/slice change, so the
+          levers settle on a <strong>~250 ms debounce</strong> rather than an instant
+          slide — the trade for clustering.</p>
+        <p class="attrib">Method &amp; basemap: deck.gl 9.3 + flowmap.gl 9.4,
+          vendored same-origin (no CDN). Basemaps: CARTO / Esri / OpenFreeMap, keyless.
+          Origin–destination data:
+          <a href="https://www.transportes.gob.es/ministerio/proyectos-singulares/estudios-de-movilidad-con-big-data/opendata-movilidad"
+            target="_blank" rel="noopener noreferrer">MITMA — Estudio de movilidad con Big Data</a>
+          (open data). Zone centroids: IDESCAT distrito geometry.</p>
+      </section>
+    </aside>
+    <main id="stage">
+      <div id="map"></div>
+      <canvas id="deck-canvas"></canvas>
+    </main>
+  </div>
+
+  <script type="module" src="app/flows_fm/main.js"></script>
+</body>
+</html>
